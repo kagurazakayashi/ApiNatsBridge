@@ -1,0 +1,6 @@
+request="POST"
+url="http://127.0.0.1:9080/ping"
+header="X-Timestamp-Ms: $(date +%s%3N)"
+echo "$request: $url"
+echo "header: $header" 
+curl --verbose --request "$request" --header "$header" "$url"
