@@ -2,3 +2,8 @@ github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260217122213-179e
 github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260217122213-179e7d619d7d/go.mod h1:yzYhw5Hvx6EiFC7Qi6msJLUwDSNMspioSiBdUcrFyQ0=
 github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260218123828-59d3da5bb033 h1:svYRzZc5G2Fc9hvBhhtMSORaWwogRP26wl1RFEfX3v0=
 github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260218123828-59d3da5bb033/go.mod h1:yzYhw5Hvx6EiFC7Qi6msJLUwDSNMspioSiBdUcrFyQ0=
+github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260219121602-30228cef019a h1:9gXij+cYL9gJlp2RRUCYgQ7Ah3rkQ2kXsKV8Hx0SaIs=
+github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver v0.0.0-20260219121602-30228cef019a/go.mod h1:yzYhw5Hvx6EiFC7Qi6msJLUwDSNMspioSiBdUcrFyQ0=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=

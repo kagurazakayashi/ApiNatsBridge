@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -16,24 +17,28 @@ import (
 // 2. 啟動伺服器並監聽啟動期間可能發生的錯誤。
 // 3. 監聽系統終止訊號，於收到訊號後執行具逾時控制的優雅關閉流程。
 func main() {
-	// 建立伺服器預設設定，並依需求覆寫必要參數。
-	var conf *nyaapiserver.HttpAPIServerConfig = nyaapiserver.DefaultConfig()
-	conf.Host = "127.0.0.1"
-	conf.Port = 9080
-	conf.LimitRequests = 5
-	conf.Logger = httpLogger
+	var configPath string
+	flag.StringVar(&configPath, "c", "", "yaml/json config file")
+	flag.Parse()
+	configPath, appConfig, appConfigErr := LoadConfigFile(configPath)
+	fmt.Printf("[main] Config File: %s\n", configPath)
+	if appConfigErr != nil {
+		fmt.Printf("[main][ERROR] %v\n", appConfigErr)
+		return
+	}
 
-	// 綁定 HTTP 請求處理器，供伺服器於收到請求時呼叫。
-	var handler func(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse = httpHandler
+	// 建立伺服器預設設定，並依需求覆寫必要參數。
+	var httpAPIServerConfig *nyaapiserver.HttpAPIServerConfig = &appConfig.HttpAPIServerConfig
 
 	// 依據設定與處理器建立伺服器實例。
-	var srv *nyaapiserver.Server = nyaapiserver.NewServer(conf, handler)
+	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, httpHandler, httpLogger)
 
 	// 於獨立 Goroutine 中啟動伺服器，避免阻塞主流程，
 	// 並於啟動失敗時輸出錯誤資訊。
 	go func() {
-		if err := srv.Start("libNyaruko_Go TestRunServer", "1.0"); err != nil {
-			fmt.Printf("[main] [錯誤] 伺服器啟動失敗：%v\n", err)
+		if err := httpAPIServer.Start("ApiNatsBridge", "1.0"); err != nil {
+			fmt.Printf("[main][ERROR] %v\n", err)
+			return
 		}
 	}()
 
@@ -49,7 +54,7 @@ func main() {
 	defer cancel()
 
 	// 執行伺服器停止流程，若停止失敗則輸出錯誤資訊。
-	if err := srv.Stop(ctx); err != nil {
-		fmt.Printf("[main] [錯誤] 伺服器停止失敗：%v\n", err)
+	if err := httpAPIServer.Stop(ctx); err != nil {
+		fmt.Printf("[main] [ERROR] Stop Server: %v\n", err)
 	}
 }

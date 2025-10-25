@@ -1,0 +1,12 @@
+httpapiserver_config:
+  httpapiserver_host: "127.0.0.1"
+  httpapiserver_post: 9080
+  httpapiserver_tls_cert_file: ""
+  httpapiserver_tls_key_file: ""
+  httpapiserver_read_timeout: 5
+  httpapiserver_write_timeout: 30
+  httpapiserver_idle_timeout: 60
+  httpapiserver_enable_rate_limit: true
+  httpapiserver_limit_requests: 50
+  httpapiserver_limit_window: 1
+  httpapiserver_block_duration: 600
