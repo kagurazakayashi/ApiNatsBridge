@@ -1,12 +1,53 @@
+# package nyaapiserver
 httpapiserver_config:
+  # 伺服器監聽地址 (預設: "0.0.0.0")
   httpapiserver_host: "127.0.0.1"
-  httpapiserver_post: 9080
+  # 伺服器監聽埠 (預設: 8080)
+  httpapiserver_port: 9080
+  # TLS 證書檔案路徑 (預設: "" = 不啟用 HTTPS)
   httpapiserver_tls_cert_file: ""
   httpapiserver_tls_key_file: ""
+  # 請求讀取超時，單位秒 (預設: 10)
   httpapiserver_read_timeout: 5
+  # 響應寫入超時，單位秒 (預設: 15)
   httpapiserver_write_timeout: 30
+  # 長連線空閒超時，單位秒 (預設: 120)
   httpapiserver_idle_timeout: 60
+  # 是否啟用 IP 限速 (預設: true)
   httpapiserver_enable_rate_limit: true
+  # 單個 IP 在限速視窗內的最大請求數 (預設: 30)
   httpapiserver_limit_requests: 50
+  # 限速視窗大小，單位秒 (預設: 1)
   httpapiserver_limit_window: 1
+  # IP 被遮蔽持續時間，單位秒 (預設: 300)
   httpapiserver_block_duration: 600
+
+# package nyanats
+nats_config:
+  # NATS 伺服器主機位址 (預設: 127.0.0.1)
+  nats_server_host: 127.0.0.1
+  # NATS 伺服器埠號 (預設: 4222)
+  nats_server_port: 4222
+  # 連線驗證使用者名稱 (可選，留空則不使用驗證)
+  nats_user: webapi
+  # 連線驗證密碼 (可選，留空則不使用驗證)
+  nats_password: Ohr1biolei4aeD3eu7isaeyie9di4uuf
+  # 用戶端識別名稱 (預設: 自動生成 UUID)
+  nats_client_name: ApiNatsBridgeTest
+  # 連線中斷後最大重新連線次數 (預設: 5)
+  nats_max_reconnects: 5
+  # 重新連線等待間隔秒數 (預設: 2)
+  nats_reconnect_wait: 2
+  # 初始連線逾時秒數 (預設: 10)
+  nats_connect_timeout: 10
+  # 全域預設 AES 對稱加密金鑰 (可選，留空則明文傳輸)
+  # 長度必須為 16 / 24 / 32 字節，分別對應 AES-128 / AES-192 / AES-256
+  # 可使用 nyanats.GenerateRandomKey() 生成隨機金鑰字串
+  nats_encryption_key: "GLOBAL_BACKUP_KEY_32_CHARS_LONG!"
+  # 針對特定主題 (Subject) 設定獨立加密金鑰 (可選)
+  # - 若主題匹配，優先使用此處的金鑰；若無匹配，回退至全域金鑰
+  # - 值設為空字串 "" 代表該主題以明文傳輸，不加密
+  # - 金鑰長度要求與全域金鑰相同 (16 / 24 / 32 字節)
+  nats_theme_keys:
+    "theme.dedicated": "DEDICATED_SECRETKEY_32_CHAR_LONG"
+    "theme.plain": ""

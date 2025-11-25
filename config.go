@@ -1,19 +1,23 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
+	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"gopkg.in/yaml.v3"
 )
 
 type ApiNatsBridgeConfig struct {
 	HttpAPIServerConfig nyaapiserver.HttpAPIServerConfig `json:"httpapiserver_config" yaml:"httpapiserver_config"`
+	NatsConfig          nyanats.NatsConfig               `json:"nats_config" yaml:"nats_config"`
 }
 
-func LoadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
+func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 	if configPath == "" {
 		exePath, err := os.Executable()
 		if err != nil {
@@ -34,4 +38,19 @@ func LoadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 	} else {
 		return configPath, fileConf, errReadFile
 	}
+}
+
+func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig) {
+	var configPath string
+	flag.StringVar(&configPath, "c", "", "yaml/json config file")
+	flag.Parse()
+	configPath, appConfig, appConfigErr := loadConfigFile(configPath)
+	fmt.Printf("[main] Config File: %s\n", configPath)
+	if appConfigErr != nil {
+		fmt.Printf("[main][ERROR] %v\n", appConfigErr)
+		return false, nil, nil
+	}
+	var httpAPIServerConfig *nyaapiserver.HttpAPIServerConfig = &appConfig.HttpAPIServerConfig
+	var natsConfig *nyanats.NatsConfig = &appConfig.NatsConfig
+	return true, httpAPIServerConfig, natsConfig
 }
