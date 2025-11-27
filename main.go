@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,18 +23,16 @@ func main() {
 
 	go func() {
 		if err := httpAPIServer.Start("ApiNatsBridge", "1.0"); err != nil {
-			fmt.Printf("[ERROR][http] %v\n", err)
+			fmt.Printf("[ERROR][HTTP] %v\n", err)
 			return
 		}
 	}()
 
-	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, log.Default())
+	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, natsLogger())
 	if err := natsClient.Error(); err != nil {
-		fmt.Printf("[ERROR][nats] %v\n", err)
+		fmt.Printf("[ERROR][NSTA] %v\n", err)
 		return
 	}
-	defer natsClient.Close()
-
 	// 建立系統訊號通道，監聽中斷與終止訊號，以便觸發優雅關閉。
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -49,6 +46,12 @@ func main() {
 
 	// 執行伺服器停止流程，若停止失敗則輸出錯誤資訊。
 	if err := httpAPIServer.Stop(ctx); err != nil {
-		fmt.Printf("[main] [ERROR] Stop Server: %v\n", err)
+		fmt.Printf("[MAIN] [ERROR] Stop Server: %v\n", err)
 	}
+
+	// 停止 NATS 連線
+	if err := natsClient.UnsubscribeAll(); err != nil {
+		fmt.Printf("[MAIN] [ERROR] UnsubscribeAll: %v\n", err)
+	}
+	natsClient.Close()
 }
