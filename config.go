@@ -12,9 +12,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type RouteConfig struct {
+	Path        string `json:"path" yaml:"path"`
+	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
+}
+
 type ApiNatsBridgeConfig struct {
 	HttpAPIServerConfig nyaapiserver.HttpAPIServerConfig `json:"httpapiserver_config" yaml:"httpapiserver_config"`
 	NatsConfig          nyanats.NatsConfig               `json:"nats_config" yaml:"nats_config"`
+	Routes              []RouteConfig                    `json:"routes" yaml:"routes"`
 }
 
 func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
@@ -40,7 +46,7 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 	}
 }
 
-func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig) {
+func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, []RouteConfig) {
 	var configPath string
 	flag.StringVar(&configPath, "c", "", "yaml/json config file")
 	flag.Parse()
@@ -48,9 +54,9 @@ func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig)
 	fmt.Printf("[main] Config File: %s\n", configPath)
 	if appConfigErr != nil {
 		fmt.Printf("[main][ERROR] %v\n", appConfigErr)
-		return false, nil, nil
+		return false, nil, nil, nil
 	}
 	var httpAPIServerConfig *nyaapiserver.HttpAPIServerConfig = &appConfig.HttpAPIServerConfig
 	var natsConfig *nyanats.NatsConfig = &appConfig.NatsConfig
-	return true, httpAPIServerConfig, natsConfig
+	return true, httpAPIServerConfig, natsConfig, appConfig.Routes
 }

@@ -1,6 +1,6 @@
 *.syso
-go-gen-l10n
-go-gen-l10n.exe
+*.log
+*.exe
 # l10n/app_localizations*.go
 nats-server
 

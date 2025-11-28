@@ -14,12 +14,24 @@ import (
 
 func main() {
 
-	isOK, httpAPIServerConfig, natsConfig := LoadConfig()
+	isOK, httpAPIServerConfig, natsConfig, routes := LoadConfig()
 	if !isOK {
 		return
 	}
 
-	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, httpHandler, httpLogger)
+	fmt.Printf("[main] 載入路由數量: %d\n", len(routes))
+	for _, r := range routes {
+		fmt.Printf("[main] 路由: %s -> %s\n", r.Path, r.NatsSubject)
+	}
+
+	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, natsLogger())
+	if err := natsClient.Error(); err != nil {
+		fmt.Printf("[ERROR][NSTA] %v\n", err)
+		return
+	}
+
+	handler := NewBridgeHandler(natsClient, routes)
+	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, handler.Handle, httpLogger)
 
 	go func() {
 		if err := httpAPIServer.Start("ApiNatsBridge", "1.0"); err != nil {
@@ -27,12 +39,6 @@ func main() {
 			return
 		}
 	}()
-
-	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, natsLogger())
-	if err := natsClient.Error(); err != nil {
-		fmt.Printf("[ERROR][NSTA] %v\n", err)
-		return
-	}
 	// 建立系統訊號通道，監聽中斷與終止訊號，以便觸發優雅關閉。
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
