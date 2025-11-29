@@ -2,7 +2,7 @@
 *.log
 *.exe
 # l10n/app_localizations*.go
-nats-server
+nats-server\nats_data
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,go,goland

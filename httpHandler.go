@@ -71,7 +71,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 	}
 }
 
-// forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務。
+// forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
 func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
 	bridgeReq := BridgeRequest{
 		Method:  req.Method,

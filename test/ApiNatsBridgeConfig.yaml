@@ -50,7 +50,7 @@ nats_config:
 
 # --- 路由轉發規則 ---
 routes:
-  - path: "/ping" # URL路径
-    nats_subject: "ping" # NATS主题
-  - path: "/test" # URL路径
-    nats_subject: "test" # NATS主题
+  - path: "/ping"
+    nats_subject: "ping_req"
+  - path: "/test"
+    nats_subject: "test_req"
