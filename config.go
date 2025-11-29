@@ -6,15 +6,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"gopkg.in/yaml.v3"
 )
 
+const defaultTimeoutSeconds = 30
+
 type RouteConfig struct {
 	Path        string `json:"path" yaml:"path"`
 	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
+	Timeout     int    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+func (r *RouteConfig) TimeoutDuration() time.Duration {
+	if r.Timeout <= 0 {
+		return defaultTimeoutSeconds * time.Second
+	}
+	return time.Duration(r.Timeout) * time.Second
 }
 
 type ApiNatsBridgeConfig struct {

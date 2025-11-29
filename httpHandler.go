@@ -9,8 +9,6 @@ import (
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 )
 
-const natsRequestTimeout = 30 * time.Second
-
 // BridgeRequest 是通過 NATS 轉發給微服務的請求結構。
 type BridgeRequest struct {
 	Method  string            `json:"method"`
@@ -29,21 +27,25 @@ type BridgeResponse struct {
 
 // BridgeHandler 負責 HTTP 請求的路由分派與 NATS 轉發。
 type BridgeHandler struct {
-	natsClient *nyanats.NyaNATS
-	routes     map[string]string // path -> nats_subject
+	natsClient    *nyanats.NyaNATS
+	routes        map[string]string        // path -> nats_subject
+	routeTimeouts map[string]time.Duration // path -> timeout
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
 func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *BridgeHandler {
 	routeMap := make(map[string]string)
+	timeoutMap := make(map[string]time.Duration)
 	for _, r := range routes {
-		fmt.Printf("[httpHandler] 載入路由: %s -> %s\n", r.Path, r.NatsSubject)
+		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration())
 		routeMap[r.Path] = r.NatsSubject
+		timeoutMap[r.Path] = r.TimeoutDuration()
 	}
 	fmt.Printf("[httpHandler] 共載入 %d 條路由\n", len(routeMap))
 	return &BridgeHandler{
-		natsClient: natsClient,
-		routes:     routeMap,
+		natsClient:    natsClient,
+		routes:        routeMap,
+		routeTimeouts: timeoutMap,
 	}
 }
 
@@ -89,8 +91,9 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 		})
 	}
 
-	fmt.Printf("[httpHandler] 轉發請求到 NATS: subject=%s\n", natsSubject)
-	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), natsRequestTimeout)
+	timeout := h.routeTimeouts[req.Path]
+	fmt.Printf("[httpHandler] 轉發請求到 NATS: subject=%s, timeout=%v\n", natsSubject, timeout)
+	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
 		fmt.Printf("[httpHandler] NATS 請求失敗: %v\n", err)
 		return nyaapiserver.JSONResponse(502, map[string]string{
