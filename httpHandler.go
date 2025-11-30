@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
@@ -28,24 +29,32 @@ type BridgeResponse struct {
 // BridgeHandler 負責 HTTP 請求的路由分派與 NATS 轉發。
 type BridgeHandler struct {
 	natsClient    *nyanats.NyaNATS
-	routes        map[string]string        // path -> nats_subject
-	routeTimeouts map[string]time.Duration // path -> timeout
+	routes        map[string]string              // path -> nats_subject
+	routeTimeouts map[string]time.Duration       // path -> timeout
+	routeMethods  map[string]map[string]struct{} // path -> set of allowed methods
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
 func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
+	methodMap := make(map[string]map[string]struct{})
 	for _, r := range routes {
-		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration())
+		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v, methods=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods())
 		routeMap[r.Path] = r.NatsSubject
 		timeoutMap[r.Path] = r.TimeoutDuration()
+		allowed := make(map[string]struct{})
+		for _, m := range r.Methods {
+			allowed[strings.ToUpper(m)] = struct{}{}
+		}
+		methodMap[r.Path] = allowed
 	}
 	fmt.Printf("[httpHandler] 共載入 %d 條路由\n", len(routeMap))
 	return &BridgeHandler{
 		natsClient:    natsClient,
 		routes:        routeMap,
 		routeTimeouts: timeoutMap,
+		routeMethods:  methodMap,
 	}
 }
 
@@ -62,6 +71,11 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 	}
 
 	if natsSubject, ok := h.routes[req.Path]; ok {
+		if allowed, hasMethods := h.routeMethods[req.Path]; hasMethods && len(allowed) > 0 {
+			if _, ok := allowed[req.Method]; !ok {
+				return &nyaapiserver.HTTPResponse{StatusCode: 405, Body: []byte("Method Not Allowed")}
+			}
+		}
 		return h.forwardToNats(req, natsSubject)
 	}
 

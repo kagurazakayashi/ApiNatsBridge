@@ -16,9 +16,10 @@ import (
 const defaultTimeoutSeconds = 30
 
 type RouteConfig struct {
-	Path        string `json:"path" yaml:"path"`
-	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
-	Timeout     int    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Path        string   `json:"path" yaml:"path"`
+	NatsSubject string   `json:"nats_subject" yaml:"nats_subject"`
+	Timeout     int      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Methods     []string `json:"methods,omitempty" yaml:"methods,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {
@@ -26,6 +27,10 @@ func (r *RouteConfig) TimeoutDuration() time.Duration {
 		return defaultTimeoutSeconds * time.Second
 	}
 	return time.Duration(r.Timeout) * time.Second
+}
+
+func (r *RouteConfig) AllowedMethods() []string {
+	return r.Methods
 }
 
 type ApiNatsBridgeConfig struct {

@@ -52,8 +52,9 @@ nats_config:
 routes:
   - path: "/ping"
     nats_subject: "ping_req"
-    # timeout: 對該路徑的 NATS 請求超時秒數，預設 30 秒
     timeout: 10
+    methods: ["GET"]
   - path: "/test"
     nats_subject: "test_req"
     timeout: 60
+    methods: ["GET", "POST"]
