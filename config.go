@@ -20,6 +20,7 @@ type RouteConfig struct {
 	NatsSubject string   `json:"nats_subject" yaml:"nats_subject"`
 	Timeout     int      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Methods     []string `json:"methods,omitempty" yaml:"methods,omitempty"`
+	ContentType string   `json:"content_type,omitempty" yaml:"content_type,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {

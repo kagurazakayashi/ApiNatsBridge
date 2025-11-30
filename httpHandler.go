@@ -28,10 +28,11 @@ type BridgeResponse struct {
 
 // BridgeHandler 負責 HTTP 請求的路由分派與 NATS 轉發。
 type BridgeHandler struct {
-	natsClient    *nyanats.NyaNATS
-	routes        map[string]string              // path -> nats_subject
-	routeTimeouts map[string]time.Duration       // path -> timeout
-	routeMethods  map[string]map[string]struct{} // path -> set of allowed methods
+	natsClient        *nyanats.NyaNATS
+	routes            map[string]string              // path -> nats_subject
+	routeTimeouts     map[string]time.Duration       // path -> timeout
+	routeMethods      map[string]map[string]struct{} // path -> set of allowed methods
+	routeContentTypes map[string]string              // path -> required Content-Type
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -39,8 +40,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
+	contentTypeMap := make(map[string]string)
 	for _, r := range routes {
-		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v, methods=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods())
+		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType)
 		routeMap[r.Path] = r.NatsSubject
 		timeoutMap[r.Path] = r.TimeoutDuration()
 		allowed := make(map[string]struct{})
@@ -48,13 +50,17 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 			allowed[strings.ToUpper(m)] = struct{}{}
 		}
 		methodMap[r.Path] = allowed
+		if r.ContentType != "" {
+			contentTypeMap[r.Path] = r.ContentType
+		}
 	}
 	fmt.Printf("[httpHandler] 共載入 %d 條路由\n", len(routeMap))
 	return &BridgeHandler{
-		natsClient:    natsClient,
-		routes:        routeMap,
-		routeTimeouts: timeoutMap,
-		routeMethods:  methodMap,
+		natsClient:        natsClient,
+		routes:            routeMap,
+		routeTimeouts:     timeoutMap,
+		routeMethods:      methodMap,
+		routeContentTypes: contentTypeMap,
 	}
 }
 
@@ -74,6 +80,17 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 		if allowed, hasMethods := h.routeMethods[req.Path]; hasMethods && len(allowed) > 0 {
 			if _, ok := allowed[req.Method]; !ok {
 				return &nyaapiserver.HTTPResponse{StatusCode: 405, Body: []byte("Method Not Allowed")}
+			}
+		}
+		if ct, hasCT := h.routeContentTypes[req.Path]; hasCT {
+			if len(req.Body) > 0 {
+				reqContentType := req.Headers["Content-Type"]
+				if reqContentType == "" {
+					reqContentType = req.Headers["content-type"]
+				}
+				if !strings.HasPrefix(reqContentType, ct) {
+					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte("Unsupported Media Type")}
+				}
 			}
 		}
 		return h.forwardToNats(req, natsSubject)

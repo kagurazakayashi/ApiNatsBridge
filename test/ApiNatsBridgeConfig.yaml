@@ -52,9 +52,11 @@ nats_config:
 routes:
   - path: "/ping"
     nats_subject: "ping_req"
-    timeout: 10
     methods: ["GET"]
+    content_type: ""
+    timeout: 10
   - path: "/test"
     nats_subject: "test_req"
-    timeout: 60
     methods: ["GET", "POST"]
+    content_type: "application/json"
+    timeout: 60
