@@ -16,11 +16,12 @@ import (
 const defaultTimeoutSeconds = 30
 
 type RouteConfig struct {
-	Path        string   `json:"path" yaml:"path"`
-	NatsSubject string   `json:"nats_subject" yaml:"nats_subject"`
-	Timeout     int      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Methods     []string `json:"methods,omitempty" yaml:"methods,omitempty"`
-	ContentType string   `json:"content_type,omitempty" yaml:"content_type,omitempty"`
+	Path        string                 `json:"path" yaml:"path"`
+	NatsSubject string                 `json:"nats_subject" yaml:"nats_subject"`
+	Timeout     int                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Methods     []string               `json:"methods,omitempty" yaml:"methods,omitempty"`
+	ContentType string                 `json:"content_type,omitempty" yaml:"content_type,omitempty"`
+	SchemaBody  map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {

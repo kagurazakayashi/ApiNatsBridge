@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // BridgeRequest 是通過 NATS 轉發給微服務的請求結構。
@@ -33,6 +35,7 @@ type BridgeHandler struct {
 	routeTimeouts     map[string]time.Duration       // path -> timeout
 	routeMethods      map[string]map[string]struct{} // path -> set of allowed methods
 	routeContentTypes map[string]string              // path -> required Content-Type
+	routeSchemas      map[string]*jsonschema.Schema  // path -> JSON Schema
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -41,6 +44,10 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
 	contentTypeMap := make(map[string]string)
+	routeSchemas := make(map[string]*jsonschema.Schema)
+
+	compiler := jsonschema.NewCompiler()
+
 	for _, r := range routes {
 		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType)
 		routeMap[r.Path] = r.NatsSubject
@@ -53,6 +60,25 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		if r.ContentType != "" {
 			contentTypeMap[r.Path] = r.ContentType
 		}
+		if r.SchemaBody != nil {
+			schemaJSON, jsonErr := json.Marshal(r.SchemaBody)
+			if jsonErr != nil {
+				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
+				continue
+			}
+			url := "config://routes" + r.Path
+			if err := compiler.AddResource(url, bytes.NewReader(schemaJSON)); err != nil {
+				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
+				continue
+			}
+			schema, err := compiler.Compile(url)
+			if err != nil {
+				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
+				continue
+			}
+			routeSchemas[r.Path] = schema
+			fmt.Printf("[httpHandler] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
+		}
 	}
 	fmt.Printf("[httpHandler] 共載入 %d 條路由\n", len(routeMap))
 	return &BridgeHandler{
@@ -61,6 +87,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		routeTimeouts:     timeoutMap,
 		routeMethods:      methodMap,
 		routeContentTypes: contentTypeMap,
+		routeSchemas:      routeSchemas,
 	}
 }
 
@@ -91,6 +118,22 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 				if !strings.HasPrefix(reqContentType, ct) {
 					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte("Unsupported Media Type")}
 				}
+			}
+		}
+		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema && len(req.Body) > 0 {
+			var bodyJSON interface{}
+			if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
+				return nyaapiserver.JSONResponse(400, map[string]interface{}{
+					"error":  "Invalid JSON body",
+					"detail": err.Error(),
+				})
+			}
+			if err := schema.Validate(bodyJSON); err != nil {
+				fmt.Printf("[httpHandler] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+				return nyaapiserver.JSONResponse(400, map[string]interface{}{
+					"error":  "Schema validation failed",
+					"detail": err.Error(),
+				})
 			}
 		}
 		return h.forwardToNats(req, natsSubject)

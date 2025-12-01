@@ -60,3 +60,8 @@ routes:
     methods: ["GET", "POST"]
     content_type: "application/json"
     timeout: 60
+    schema_body:
+      type: object
+      properties:
+        message:
+          type: string
