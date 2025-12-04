@@ -28,7 +28,29 @@ type BridgeResponse struct {
 	Body       string            `json:"body"`
 }
 
-// BridgeHandler 負責 HTTP 請求的路由分派與 NATS 轉發。
+// buildSchema 從 schema_body 中提取控制鍵（root_type、strict），其餘作為 JSON Schema 傳遞。
+func buildSchema(r *RouteConfig) map[string]interface{} {
+	if r.SchemaBody == nil {
+		return nil
+	}
+	m := make(map[string]interface{}, len(r.SchemaBody))
+	for k, v := range r.SchemaBody {
+		m[k] = v
+	}
+	if rootType, ok := m["root_type"]; ok {
+		delete(m, "root_type")
+		if s, ok := rootType.(string); ok && s != "" {
+			m["type"] = s
+		}
+	}
+	if strict, ok := m["strict"]; ok {
+		delete(m, "strict")
+		if b, ok := strict.(bool); ok && b {
+			m["additionalProperties"] = false
+		}
+	}
+	return m
+}
 type BridgeHandler struct {
 	natsClient        *nyanats.NyaNATS
 	routes            map[string]string              // path -> nats_subject
@@ -60,8 +82,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		if r.ContentType != "" {
 			contentTypeMap[r.Path] = r.ContentType
 		}
-		if r.SchemaBody != nil {
-			schemaJSON, jsonErr := json.Marshal(r.SchemaBody)
+		schemaMap := buildSchema(&r)
+		if schemaMap != nil {
+			schemaJSON, jsonErr := json.Marshal(schemaMap)
 			if jsonErr != nil {
 				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
 				continue

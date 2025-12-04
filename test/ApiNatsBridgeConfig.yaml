@@ -50,18 +50,21 @@ nats_config:
 
 # --- 路由轉發規則 ---
 routes:
-  - path: "/ping"
-    nats_subject: "ping_req"
-    methods: ["GET"]
-    content_type: ""
-    timeout: 10
-  - path: "/test"
-    nats_subject: "test_req"
-    methods: ["GET", "POST"]
-    content_type: "application/json"
-    timeout: 60
-    schema_body:
-      type: object
-      properties:
+  - path: "/ping"                    # HTTP 請求路徑
+    nats_subject: "ping_req"         # 轉發至 NATS 的 Subject
+    methods: ["GET"]                 # 允許的 HTTP 方法
+    content_type: ""                 # 要求的 Content-Type（空=不檢查）
+    timeout: 10                      # NATS 等待微服務回應的逾時秒數
+  - path: "/test"                    # HTTP 請求路徑
+    nats_subject: "test_req"         # 轉發至 NATS 的 Subject
+    methods: ["GET", "POST"]         # 允許的 HTTP 方法
+    content_type: "application/json" # 要求的 Content-Type 前綴
+    timeout: 60                      # NATS 等待微服務回應的逾時秒數
+    schema_body:                     # JSON Schema 校驗規則（可選）
+      root_type: object              #   控制鍵：根節點類型
+      strict: true                   #   控制鍵：嚴格模式，拒絕未知欄位
+      required:                      #   JSON Schema：必須包含的鍵
+        - message
+      properties:                    #   JSON Schema：欄位定義
         message:
           type: string
