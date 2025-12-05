@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,13 +53,64 @@ func buildSchema(r *RouteConfig) map[string]interface{} {
 	}
 	return m
 }
+func coerceFormValues(formMap map[string]interface{}, schemaMap map[string]interface{}) {
+	props, ok := schemaMap["properties"]
+	if !ok {
+		return
+	}
+	propMap, ok := props.(map[string]interface{})
+	if !ok {
+		return
+	}
+	for key, val := range formMap {
+		propDef, hasProp := propMap[key]
+		if !hasProp {
+			continue
+		}
+		propDefMap, ok := propDef.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		propType, hasType := propDefMap["type"]
+		if !hasType {
+			continue
+		}
+		typeStr, ok := propType.(string)
+		if !ok {
+			continue
+		}
+		strVal, ok := val.(string)
+		if !ok {
+			continue
+		}
+		switch typeStr {
+		case "integer":
+			if n, err := strconv.ParseInt(strVal, 10, 64); err == nil {
+				formMap[key] = n
+			}
+		case "number":
+			if n, err := strconv.ParseFloat(strVal, 64); err == nil {
+				formMap[key] = n
+			}
+		case "boolean":
+			switch strings.ToLower(strVal) {
+			case "true", "1":
+				formMap[key] = true
+			case "false", "0", "":
+				formMap[key] = false
+			}
+		}
+	}
+}
+
 type BridgeHandler struct {
 	natsClient        *nyanats.NyaNATS
-	routes            map[string]string              // path -> nats_subject
-	routeTimeouts     map[string]time.Duration       // path -> timeout
-	routeMethods      map[string]map[string]struct{} // path -> set of allowed methods
-	routeContentTypes map[string]string              // path -> required Content-Type
-	routeSchemas      map[string]*jsonschema.Schema  // path -> JSON Schema
+	routes            map[string]string                        // path -> nats_subject
+	routeTimeouts     map[string]time.Duration                 // path -> timeout
+	routeMethods      map[string]map[string]struct{}           // path -> set of allowed methods
+	routeContentTypes map[string]string                        // path -> required Content-Type
+	routeSchemas      map[string]*jsonschema.Schema            // path -> JSON Schema
+	routeSchemaMaps   map[string]map[string]interface{}        // path -> raw schema map (for form type coercion)
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -67,6 +120,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 	methodMap := make(map[string]map[string]struct{})
 	contentTypeMap := make(map[string]string)
 	routeSchemas := make(map[string]*jsonschema.Schema)
+	routeSchemaMaps := make(map[string]map[string]interface{})
 
 	compiler := jsonschema.NewCompiler()
 
@@ -84,6 +138,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		}
 		schemaMap := buildSchema(&r)
 		if schemaMap != nil {
+			routeSchemaMaps[r.Path] = schemaMap
 			schemaJSON, jsonErr := json.Marshal(schemaMap)
 			if jsonErr != nil {
 				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
@@ -111,6 +166,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		routeMethods:      methodMap,
 		routeContentTypes: contentTypeMap,
 		routeSchemas:      routeSchemas,
+		routeSchemaMaps:   routeSchemaMaps,
 	}
 }
 
@@ -142,6 +198,43 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte("Unsupported Media Type")}
 				}
 			}
+		}
+		if ct, hasCT := h.routeContentTypes[req.Path]; hasCT && strings.HasPrefix(ct, "application/x-www-form-urlencoded") && len(req.Body) > 0 {
+			formValues, urlErr := url.ParseQuery(string(req.Body))
+			if urlErr != nil {
+				return nyaapiserver.JSONResponse(400, map[string]interface{}{
+					"error":  "Invalid form body",
+					"detail": urlErr.Error(),
+				})
+			}
+			formMap := make(map[string]interface{}, len(formValues))
+			for k, v := range formValues {
+				if len(v) == 1 {
+					formMap[k] = v[0]
+				} else {
+					formMap[k] = v
+				}
+			}
+			if schemaMap, ok := h.routeSchemaMaps[req.Path]; ok {
+				coerceFormValues(formMap, schemaMap)
+			}
+			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
+				if err := schema.Validate(formMap); err != nil {
+					fmt.Printf("[httpHandler] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+					return nyaapiserver.JSONResponse(400, map[string]interface{}{
+						"error":  "Schema validation failed",
+						"detail": err.Error(),
+					})
+				}
+			}
+			jsonBody, jsonErr := json.Marshal(formMap)
+			if jsonErr != nil {
+				return nyaapiserver.JSONResponse(500, map[string]string{
+					"error": "Internal Server Error: failed to marshal form data",
+				})
+			}
+			req.Body = jsonBody
+			return h.forwardToNats(req, natsSubject)
 		}
 		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema && len(req.Body) > 0 {
 			var bodyJSON interface{}

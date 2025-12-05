@@ -37,6 +37,9 @@ ECHO.
 ECHO --- test\test.bat ---
 CALL test\test.bat
 ECHO.
+ECHO --- test\test_form.bat ---
+CALL test\test_form.bat
+ECHO.
 
 ECHO ============================================
 ECHO   Test script finished.

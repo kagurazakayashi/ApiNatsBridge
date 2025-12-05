@@ -68,3 +68,18 @@ routes:
       properties:                    #   JSON Schema：欄位定義
         message:
           type: string
+  - path: "/test_form"               # HTTP 請求路徑（表單提交測試）
+    nats_subject: "test_req"         # 轉發至 NATS 的 Subject
+    methods: ["POST"]                # 允許的 HTTP 方法
+    content_type: "application/x-www-form-urlencoded"
+    timeout: 60                      # NATS 等待微服務回應的逾時秒數
+    schema_body:                     # JSON Schema 校驗規則
+      root_type: object
+      strict: true
+      required:
+        - message
+        - count
+        - active
+      properties:
+        message:
+          type: string
