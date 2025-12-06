@@ -48,6 +48,22 @@ nats_config:
     "theme.dedicated": "DEDICATED_SECRETKEY_32_CHAR_LONG"
     "theme.plain": ""
 
+# --- 橋接層設定 ---
+bridge:
+  # CDN 服務商傳遞真實 IP 的專屬標頭清單, 若 CDN 僅使用 X-Forwarded-For，則無需加入
+  cdnheader:
+    - "CF-Connecting-IP"        # Cloudflare
+    - "True-Client-IP"          # Akamai / Cloudflare Enterprise
+    - "Fastly-Client-IP"        # Fastly
+    - "CloudFront-Viewer-Address" # AWS CloudFront
+    - "CDN-Viewer-IP"           # Google Cloud CDN
+    - "X-Azure-ClientIP"        # Azure CDN / Microsoft CDN
+    - "Incap-Client-IP"         # Imperva / Incapsula
+    - "X-Sucuri-ClientIP"       # Sucuri
+    - "X-SP-Forwarding-IP"      # StackPath
+    - "Ali-Cdn-Real-Ip"         # 阿里雲 CDN / DCDN / 全站加速
+    - "Ar-Real-IP"              # ArvanCloud
+
 # --- 路由轉發規則 ---
 routes:
   - path: "/ping"                    # HTTP 請求路徑

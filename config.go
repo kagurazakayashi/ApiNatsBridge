@@ -15,6 +15,12 @@ import (
 
 const defaultTimeoutSeconds = 30
 
+// BridgeConfig 定義橋接層設定。
+type BridgeConfig struct {
+	// CDN 服務商傳遞真實 IP 的標頭清單
+	CdnHeader []string `json:"cdnheader" yaml:"cdnheader"`
+}
+
 // RouteConfig 定義單一路由的轉發規則。
 type RouteConfig struct {
 	// HTTP 請求路徑
@@ -48,6 +54,8 @@ type ApiNatsBridgeConfig struct {
 	HttpAPIServerConfig nyaapiserver.HttpAPIServerConfig `json:"httpapiserver_config" yaml:"httpapiserver_config"`
 	// NATS 用戶端設定
 	NatsConfig nyanats.NatsConfig `json:"nats_config" yaml:"nats_config"`
+	// 橋接層設定
+	Bridge BridgeConfig `json:"bridge" yaml:"bridge"`
 	// 路由轉發規則清單
 	Routes []RouteConfig `json:"routes" yaml:"routes"`
 }
@@ -75,7 +83,7 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 	}
 }
 
-func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, []RouteConfig) {
+func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
 	var configPath string
 	flag.StringVar(&configPath, "c", "", "yaml/json config file")
 	flag.Parse()
@@ -83,9 +91,9 @@ func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig,
 	fmt.Printf("[main] Config File: %s\n", configPath)
 	if appConfigErr != nil {
 		fmt.Printf("[main][ERROR] %v\n", appConfigErr)
-		return false, nil, nil, nil
+		return false, nil, nil, BridgeConfig{}, nil
 	}
 	var httpAPIServerConfig *nyaapiserver.HttpAPIServerConfig = &appConfig.HttpAPIServerConfig
 	var natsConfig *nyanats.NatsConfig = &appConfig.NatsConfig
-	return true, httpAPIServerConfig, natsConfig, appConfig.Routes
+	return true, httpAPIServerConfig, natsConfig, appConfig.Bridge, appConfig.Routes
 }

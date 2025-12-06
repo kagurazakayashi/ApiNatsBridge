@@ -132,10 +132,12 @@ type BridgeHandler struct {
 	routeSchemas map[string]*jsonschema.Schema
 	// 各路徑的原始 Schema 對應表（供表單類型轉換使用）
 	routeSchemaMaps map[string]map[string]interface{}
+	// CDN 服務商對應的 IP 標頭清單
+	cdnHeaders []string
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
@@ -179,7 +181,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 			fmt.Printf("[httpHandler] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
 		}
 	}
-	fmt.Printf("[httpHandler] 共載入 %d 條路由\n", len(routeMap))
+	fmt.Printf("[httpHandler] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
 	return &BridgeHandler{
 		natsClient:        natsClient,
 		routes:            routeMap,
@@ -188,6 +190,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig) *Bridge
 		routeContentTypes: contentTypeMap,
 		routeSchemas:      routeSchemas,
 		routeSchemaMaps:   routeSchemaMaps,
+		cdnHeaders:        cdnHeaders,
 	}
 }
 
@@ -304,17 +307,31 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	if bridgeReq.Params == nil {
 		bridgeReq.Params = make(map[string]string)
 	}
-	// 自動判斷實際用戶端 IP：X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
-	if ip := bridgeReq.Headers["X-Real-Ip"]; ip != "" {
-		bridgeReq.IP = ip
-	} else if ip := bridgeReq.Headers["x-real-ip"]; ip != "" {
-		bridgeReq.IP = ip
-	} else if xff := bridgeReq.Headers["X-Forwarded-For"]; xff != "" {
-		bridgeReq.IP = strings.Split(xff, ",")[0]
-		bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
-	} else if xff := bridgeReq.Headers["x-forwarded-for"]; xff != "" {
-		bridgeReq.IP = strings.Split(xff, ",")[0]
-		bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
+	// 自動判斷實際用戶端 IP
+	// 優先序：CDN 標頭 > X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
+	for _, header := range h.cdnHeaders {
+		if ip, ok := bridgeReq.Headers[header]; ok && ip != "" {
+			bridgeReq.IP = ip
+			break
+		}
+		lower := strings.ToLower(header)
+		if ip, ok := bridgeReq.Headers[lower]; ok && ip != "" {
+			bridgeReq.IP = ip
+			break
+		}
+	}
+	if bridgeReq.IP == "" {
+		if ip := bridgeReq.Headers["X-Real-Ip"]; ip != "" {
+			bridgeReq.IP = ip
+		} else if ip := bridgeReq.Headers["x-real-ip"]; ip != "" {
+			bridgeReq.IP = ip
+		} else if xff := bridgeReq.Headers["X-Forwarded-For"]; xff != "" {
+			bridgeReq.IP = strings.Split(xff, ",")[0]
+			bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
+		} else if xff := bridgeReq.Headers["x-forwarded-for"]; xff != "" {
+			bridgeReq.IP = strings.Split(xff, ",")[0]
+			bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
+		}
 	}
 	if bridgeReq.IP == "" {
 		bridgeReq.IP = bridgeReq.RemoteAddr

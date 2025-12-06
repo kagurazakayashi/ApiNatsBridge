@@ -14,7 +14,7 @@ import (
 
 func main() {
 
-	isOK, httpAPIServerConfig, natsConfig, routes := LoadConfig()
+	isOK, httpAPIServerConfig, natsConfig, bridgeConfig, routes := LoadConfig()
 	if !isOK {
 		return
 	}
@@ -23,6 +23,9 @@ func main() {
 	for _, r := range routes {
 		fmt.Printf("[main] 路由: %s -> %s\n", r.Path, r.NatsSubject)
 	}
+	for _, cdn := range bridgeConfig.CdnHeader {
+		fmt.Printf("[main] CDN 標頭: %s\n", cdn)
+	}
 
 	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, natsLogger())
 	if err := natsClient.Error(); err != nil {
@@ -30,7 +33,7 @@ func main() {
 		return
 	}
 
-	handler := NewBridgeHandler(natsClient, routes)
+	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader)
 	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, handler.Handle, httpLogger)
 
 	go func() {
