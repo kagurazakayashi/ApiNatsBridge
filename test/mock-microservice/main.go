@@ -17,30 +17,46 @@ import (
 
 // routeConfig 定義單一路由與 NATS Subject 的對應關係。
 type routeConfig struct {
-	Path        string `json:"path" yaml:"path"`
+	// HTTP 請求路徑
+	Path string `json:"path" yaml:"path"`
+	// 對應的 NATS Subject
 	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
 }
 
 // mockServiceConfig 定義 mock service 啟動時所需的完整設定。
 type mockServiceConfig struct {
+	// NATS 用戶端設定
 	NatsConfig nyanats.NatsConfig `json:"nats_config" yaml:"nats_config"`
-	Routes     []routeConfig      `json:"routes" yaml:"routes"`
+	// 路由清單
+	Routes []routeConfig `json:"routes" yaml:"routes"`
 }
 
 // bridgeRequest 定義由橋接層傳入 mock service 的請求資料格式。
 type bridgeRequest struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
+	// HTTP 請求方法（GET、POST 等）
+	Method string `json:"method"`
+	// HTTP 請求路徑
+	Path string `json:"path"`
+	// HTTP 請求標頭集合
 	Headers map[string]string `json:"headers"`
-	Params  map[string]string `json:"params"`
-	Body    string            `json:"body"`
+	// HTTP Cookie 鍵值對集合
+	Cookies map[string]string `json:"cookies"`
+	// 用戶端來源 IP 位址
+	RemoteAddr string `json:"remote_addr"`
+	// 請求參數集合（URL 查詢參數與 POST 表單資料）
+	Params map[string]string `json:"params"`
+	// HTTP 請求本文內容
+	Body string `json:"body"`
 }
 
 // bridgeResponse 定義 mock service 回傳給橋接層的回應資料格式。
 type bridgeResponse struct {
-	StatusCode int               `json:"status_code"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
+	// HTTP 狀態碼
+	StatusCode int `json:"status_code"`
+	// HTTP 回應標頭集合
+	Headers map[string]string `json:"headers"`
+	// HTTP 回應本文內容
+	Body string `json:"body"`
 }
 
 // loadConfig 載入指定路徑的 YAML 設定檔；若未指定路徑，則依執行檔名稱推導預設設定檔名稱。
@@ -118,8 +134,13 @@ func main() {
 
 			log.Printf("HTTP Method  : %s", req.Method)
 			log.Printf("HTTP Path    : %s", req.Path)
+			log.Printf("Remote Addr  : %s", req.RemoteAddr)
 			log.Println("Headers      :")
 			for k, v := range req.Headers {
+				log.Printf("  %s: %s", k, v)
+			}
+			log.Println("Cookies      :")
+			for k, v := range req.Cookies {
 				log.Printf("  %s: %s", k, v)
 			}
 			log.Println("Params       :")

@@ -9,10 +9,8 @@ import (
 )
 
 // ApiResponsePing 定義 ping API 的 JSON 回應結構。
-//
-// Pong 欄位表示伺服器目前時間戳（毫秒）與客戶端提供之時間戳（毫秒）間的差值，
-// 可用於估算請求往返延遲或校正雙方時間差。
 type ApiResponsePing struct {
+	// 伺服器與客戶端時間戳差值（毫秒）
 	Pong int64 `json:"pong"`
 }
 

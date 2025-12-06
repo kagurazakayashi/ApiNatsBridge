@@ -16,18 +16,30 @@ import (
 
 // BridgeRequest 是通過 NATS 轉發給微服務的請求結構。
 type BridgeRequest struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
+	// HTTP 請求方法（GET、POST 等）
+	Method string `json:"method"`
+	// HTTP 請求路徑
+	Path string `json:"path"`
+	// HTTP 請求標頭集合
 	Headers map[string]string `json:"headers"`
-	Params  map[string]string `json:"params"`
-	Body    string            `json:"body"`
+	// HTTP Cookie 鍵值對集合
+	Cookies map[string]string `json:"cookies"`
+	// 用戶端來源 IP 位址
+	RemoteAddr string `json:"remote_addr"`
+	// 請求參數集合（URL 查詢參數與 POST 表單資料）
+	Params map[string]string `json:"params"`
+	// HTTP 請求本文內容
+	Body string `json:"body"`
 }
 
 // BridgeResponse 是微服務通過 NATS 返回的回應結構。
 type BridgeResponse struct {
-	StatusCode int               `json:"status_code"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
+	// HTTP 狀態碼
+	StatusCode int `json:"status_code"`
+	// HTTP 回應標頭集合
+	Headers map[string]string `json:"headers"`
+	// HTTP 回應本文內容
+	Body string `json:"body"`
 }
 
 // buildSchema 從 schema_body 中提取控制鍵（root_type、strict），其餘作為 JSON Schema 傳遞。
@@ -104,13 +116,20 @@ func coerceFormValues(formMap map[string]interface{}, schemaMap map[string]inter
 }
 
 type BridgeHandler struct {
-	natsClient        *nyanats.NyaNATS
-	routes            map[string]string                        // path -> nats_subject
-	routeTimeouts     map[string]time.Duration                 // path -> timeout
-	routeMethods      map[string]map[string]struct{}           // path -> set of allowed methods
-	routeContentTypes map[string]string                        // path -> required Content-Type
-	routeSchemas      map[string]*jsonschema.Schema            // path -> JSON Schema
-	routeSchemaMaps   map[string]map[string]interface{}        // path -> raw schema map (for form type coercion)
+	// NATS 用戶端實例
+	natsClient *nyanats.NyaNATS
+	// 路徑到 NATS Subject 的對應表
+	routes map[string]string
+	// 各路徑的逾時設定
+	routeTimeouts map[string]time.Duration
+	// 各路徑允許的 HTTP 方法集合
+	routeMethods map[string]map[string]struct{}
+	// 各路徑要求的 Content-Type
+	routeContentTypes map[string]string
+	// 各路徑的 JSON Schema 編譯結果
+	routeSchemas map[string]*jsonschema.Schema
+	// 各路徑的原始 Schema 對應表（供表單類型轉換使用）
+	routeSchemaMaps map[string]map[string]interface{}
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -266,11 +285,22 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 // forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
 func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
 	bridgeReq := BridgeRequest{
-		Method:  req.Method,
-		Path:    req.Path,
-		Headers: req.Headers,
-		Params:  req.Params,
-		Body:    string(req.Body),
+		Method:     req.Method,
+		Path:       req.Path,
+		Headers:    req.Headers,
+		Cookies:    req.Cookies,
+		RemoteAddr: req.RemoteAddr,
+		Params:     req.Params,
+		Body:       string(req.Body),
+	}
+	if bridgeReq.Headers == nil {
+		bridgeReq.Headers = make(map[string]string)
+	}
+	if bridgeReq.Cookies == nil {
+		bridgeReq.Cookies = make(map[string]string)
+	}
+	if bridgeReq.Params == nil {
+		bridgeReq.Params = make(map[string]string)
 	}
 
 	reqJSON, err := json.Marshal(bridgeReq)

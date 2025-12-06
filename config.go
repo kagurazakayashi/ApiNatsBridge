@@ -15,13 +15,20 @@ import (
 
 const defaultTimeoutSeconds = 30
 
+// RouteConfig 定義單一路由的轉發規則。
 type RouteConfig struct {
-	Path        string                 `json:"path" yaml:"path"`
-	NatsSubject string                 `json:"nats_subject" yaml:"nats_subject"`
-	Timeout     int                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Methods     []string               `json:"methods,omitempty" yaml:"methods,omitempty"`
-	ContentType string                 `json:"content_type,omitempty" yaml:"content_type,omitempty"`
-	SchemaBody  map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
+	// HTTP 請求路徑
+	Path string `json:"path" yaml:"path"`
+	// 對應的 NATS Subject
+	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
+	// NATS 等待回應的逾時秒數
+	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// 允許的 HTTP 方法清單
+	Methods []string `json:"methods,omitempty" yaml:"methods,omitempty"`
+	// 要求的 Content-Type 前綴
+	ContentType string `json:"content_type,omitempty" yaml:"content_type,omitempty"`
+	// JSON Schema 校驗規則定義
+	SchemaBody map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {
@@ -35,10 +42,14 @@ func (r *RouteConfig) AllowedMethods() []string {
 	return r.Methods
 }
 
+// ApiNatsBridgeConfig 定義 ApiNatsBridge 完整的執行設定。
 type ApiNatsBridgeConfig struct {
+	// HTTP API 伺服器設定
 	HttpAPIServerConfig nyaapiserver.HttpAPIServerConfig `json:"httpapiserver_config" yaml:"httpapiserver_config"`
-	NatsConfig          nyanats.NatsConfig               `json:"nats_config" yaml:"nats_config"`
-	Routes              []RouteConfig                    `json:"routes" yaml:"routes"`
+	// NATS 用戶端設定
+	NatsConfig nyanats.NatsConfig `json:"nats_config" yaml:"nats_config"`
+	// 路由轉發規則清單
+	Routes []RouteConfig `json:"routes" yaml:"routes"`
 }
 
 func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
