@@ -15,10 +15,37 @@ import (
 
 const defaultTimeoutSeconds = 30
 
+// ScalarLimitRule 定義純量欄位的長度限制（如 path、body）。
+type ScalarLimitRule struct {
+	// 最大長度（位元組），0 表示不限制
+	MaxLength int `json:"max_length,omitempty" yaml:"max_length,omitempty"`
+}
+
+// MapLimitRule 定義鍵值對集合的長度限制（如 headers、cookies、params）。
+type MapLimitRule struct {
+	// 最大筆數，0 表示不限制
+	MaxCount int `json:"max_count,omitempty" yaml:"max_count,omitempty"`
+	// 每個鍵的最大長度（位元組），0 表示不限制
+	MaxKeyLen int `json:"max_key_length,omitempty" yaml:"max_key_length,omitempty"`
+	// 每個值的最大長度（位元組），0 表示不限制
+	MaxValueLen int `json:"max_value_length,omitempty" yaml:"max_value_length,omitempty"`
+}
+
+// LimitRule 定義請求各欄位的長度限制。
+type LimitRule struct {
+	Path    ScalarLimitRule `json:"path,omitempty" yaml:"path,omitempty"`
+	Headers MapLimitRule    `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Cookies MapLimitRule    `json:"cookies,omitempty" yaml:"cookies,omitempty"`
+	Params  MapLimitRule    `json:"params,omitempty" yaml:"params,omitempty"`
+	Body    ScalarLimitRule `json:"body,omitempty" yaml:"body,omitempty"`
+}
+
 // BridgeConfig 定義橋接層設定。
 type BridgeConfig struct {
 	// CDN 服務商傳遞真實 IP 的標頭清單
 	CdnHeader []string `json:"cdnheader" yaml:"cdnheader"`
+	// 請求欄位長度限制規則
+	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
 }
 
 // RouteConfig 定義單一路由的轉發規則。

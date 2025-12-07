@@ -134,10 +134,12 @@ type BridgeHandler struct {
 	routeSchemaMaps map[string]map[string]interface{}
 	// CDN 服務商對應的 IP 標頭清單
 	cdnHeaders []string
+	// 請求欄位長度限制規則
+	limits *LimitRule
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
@@ -148,7 +150,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	compiler := jsonschema.NewCompiler()
 
 	for _, r := range routes {
-		fmt.Printf("[httpHandler] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType)
+		fmt.Printf("[BRIDGE] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType)
 		routeMap[r.Path] = r.NatsSubject
 		timeoutMap[r.Path] = r.TimeoutDuration()
 		allowed := make(map[string]struct{})
@@ -164,24 +166,24 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			routeSchemaMaps[r.Path] = schemaMap
 			schemaJSON, jsonErr := json.Marshal(schemaMap)
 			if jsonErr != nil {
-				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
+				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
 				continue
 			}
 			url := "config://routes" + r.Path
 			if err := compiler.AddResource(url, bytes.NewReader(schemaJSON)); err != nil {
-				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
+				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
 				continue
 			}
 			schema, err := compiler.Compile(url)
 			if err != nil {
-				fmt.Printf("[httpHandler] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
+				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
 				continue
 			}
 			routeSchemas[r.Path] = schema
-			fmt.Printf("[httpHandler] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
+			fmt.Printf("[BRIDGE] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
 		}
 	}
-	fmt.Printf("[httpHandler] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
+	fmt.Printf("[BRIDGE] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
 	return &BridgeHandler{
 		natsClient:        natsClient,
 		routes:            routeMap,
@@ -191,19 +193,26 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		routeSchemas:      routeSchemas,
 		routeSchemaMaps:   routeSchemaMaps,
 		cdnHeaders:        cdnHeaders,
+		limits:            limits,
 	}
 }
 
 // Handle 為 HTTP 請求的統一入口，依序檢查設定檔路由、硬編碼路由後回傳回應。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
-	fmt.Printf("\n[httpHandler] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
+	fmt.Printf("\n[BRIDGE] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
+
+	if h.limits != nil {
+		if resp := h.validateLimits(req); resp != nil {
+			return resp
+		}
+	}
 
 	if len(req.Params) > 0 {
-		fmt.Printf("[httpHandler] HTTP 參數：%v\n", req.Params)
+		fmt.Printf("[BRIDGE] HTTP 參數：%v\n", req.Params)
 	}
 
 	if len(req.Cookies) > 0 {
-		fmt.Printf("[httpHandler] HTTP Cookie：%v\n", req.Cookies)
+		fmt.Printf("[BRIDGE] HTTP Cookie：%v\n", req.Cookies)
 	}
 
 	if natsSubject, ok := h.routes[req.Path]; ok {
@@ -244,7 +253,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 			}
 			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 				if err := schema.Validate(formMap); err != nil {
-					fmt.Printf("[httpHandler] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
 					return nyaapiserver.JSONResponse(400, map[string]interface{}{
 						"error":  "Schema validation failed",
 						"detail": err.Error(),
@@ -269,7 +278,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 				})
 			}
 			if err := schema.Validate(bodyJSON); err != nil {
-				fmt.Printf("[httpHandler] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+				fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
 				return nyaapiserver.JSONResponse(400, map[string]interface{}{
 					"error":  "Schema validation failed",
 					"detail": err.Error(),
@@ -285,6 +294,74 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 	default:
 		return &nyaapiserver.HTTPResponse{StatusCode: 404, Body: []byte("Not Found")}
 	}
+}
+
+// validateLimits 根據 LimitRule 檢查請求各欄位長度，不符合則回傳 400 錯誤。
+func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
+	r := h.limits
+
+	if r.Path.MaxLength > 0 && len(req.Path) > r.Path.MaxLength {
+		return nyaapiserver.JSONResponse(400, map[string]interface{}{
+			"error": "Path too long",
+			"field": "path",
+			"limit": r.Path.MaxLength,
+		})
+	}
+
+	if r.Body.MaxLength > 0 && len(req.Body) > r.Body.MaxLength {
+		return nyaapiserver.JSONResponse(400, map[string]interface{}{
+			"error": "Body too long",
+			"field": "body",
+			"limit": r.Body.MaxLength,
+		})
+	}
+
+	if resp := h.validateMapLimit(req.Headers, r.Headers, "headers"); resp != nil {
+		return resp
+	}
+	if resp := h.validateMapLimit(req.Cookies, r.Cookies, "cookies"); resp != nil {
+		return resp
+	}
+	if resp := h.validateMapLimit(req.Params, r.Params, "params"); resp != nil {
+		return resp
+	}
+
+	return nil
+}
+
+func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule, field string) *nyaapiserver.HTTPResponse {
+	if rule.MaxCount <= 0 && rule.MaxKeyLen <= 0 && rule.MaxValueLen <= 0 {
+		return nil
+	}
+	if rule.MaxCount > 0 && len(m) > rule.MaxCount {
+		return nyaapiserver.JSONResponse(400, map[string]interface{}{
+			"error":  "Too many entries",
+			"field":  field,
+			"limit":  rule.MaxCount,
+			"actual": len(m),
+		})
+	}
+	for k, v := range m {
+		if rule.MaxKeyLen > 0 && len(k) > rule.MaxKeyLen {
+			return nyaapiserver.JSONResponse(400, map[string]interface{}{
+				"error":  "Key too long",
+				"field":  field,
+				"key":    k,
+				"limit":  rule.MaxKeyLen,
+				"actual": len(k),
+			})
+		}
+		if rule.MaxValueLen > 0 && len(v) > rule.MaxValueLen {
+			return nyaapiserver.JSONResponse(400, map[string]interface{}{
+				"error":  "Value too long",
+				"field":  field,
+				"key":    k,
+				"limit":  rule.MaxValueLen,
+				"actual": len(v),
+			})
+		}
+	}
+	return nil
 }
 
 // forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
@@ -339,17 +416,17 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	reqJSON, err := json.Marshal(bridgeReq)
 	if err != nil {
-		fmt.Printf("[httpHandler] BridgeRequest 序列化失敗: %v\n", err)
+		fmt.Printf("[BRIDGE] BridgeRequest 序列化失敗: %v\n", err)
 		return nyaapiserver.JSONResponse(500, map[string]string{
 			"error": "Internal Server Error: failed to marshal request",
 		})
 	}
 
 	timeout := h.routeTimeouts[req.Path]
-	fmt.Printf("[httpHandler] 轉發請求到 NATS: subject=%s, timeout=%v\n", natsSubject, timeout)
+	fmt.Printf("[BRIDGE] 轉發請求到 NATS: subject=%s, timeout=%v\n", natsSubject, timeout)
 	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
-		fmt.Printf("[httpHandler] NATS 請求失敗: %v\n", err)
+		fmt.Printf("[BRIDGE] NATS 請求失敗: %v\n", err)
 		return nyaapiserver.JSONResponse(502, map[string]string{
 			"error": fmt.Sprintf("Bad Gateway: NATS request failed: %v", err),
 		})
@@ -357,7 +434,7 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	var bridgeResp BridgeResponse
 	if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
-		fmt.Printf("[httpHandler] BridgeResponse 解析失敗: %v, 原始回應: %s\n", err, respStr)
+		fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v, 原始回應: %s\n", err, respStr)
 		return &nyaapiserver.HTTPResponse{
 			StatusCode: 200,
 			Body:       []byte(respStr),

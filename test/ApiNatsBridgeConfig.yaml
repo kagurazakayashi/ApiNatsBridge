@@ -64,6 +64,25 @@ bridge:
     - "Ali-Cdn-Real-Ip"         # 阿里雲 CDN / DCDN / 全站加速
     - "Ar-Real-IP"              # ArvanCloud
 
+  # 請求欄位長度限制（0 或省略表示不限制）
+  limits:
+    path:
+      max_length: 2048           # 請求路徑最大長度（位元組）
+    headers:
+      max_count: 64              # 標頭最大筆數
+      max_key_length: 256        # 標頭名稱最大長度（位元組）
+      max_value_length: 4096     # 標頭值最大長度（位元組）
+    cookies:
+      max_count: 32              # Cookie 最大筆數
+      max_key_length: 256        # Cookie 名稱最大長度（位元組）
+      max_value_length: 4096     # Cookie 值最大長度（位元組）
+    params:
+      max_count: 64              # 參數最大筆數
+      max_key_length: 256        # 參數名稱最大長度（位元組）
+      max_value_length: 4096     # 參數值最大長度（位元組）
+    body:
+      max_length: 1048576        # 請求本文最大長度（位元組，此例為 1MB）
+
 # --- 路由轉發規則 ---
 routes:
   - path: "/ping"                    # HTTP 請求路徑
@@ -94,8 +113,6 @@ routes:
       strict: true
       required:
         - message
-        - count
-        - active
       properties:
         message:
           type: string

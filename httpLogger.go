@@ -23,7 +23,7 @@ func httpLogger(line string) {
 	}
 
 	// 輸出原始 HTTP 日誌內容，保留即時觀測能力。
-	fmt.Printf("[HTTPLOG]  %s\n", line)
+	fmt.Printf("[HTTP]  %s\n", line)
 
 	// 僅針對一般事件輸出統計資訊；
 	// 以 '#' 開頭的訊息通常為系統內部標記，不額外附帶狀態快照。
