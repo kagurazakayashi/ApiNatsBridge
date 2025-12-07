@@ -41,8 +41,10 @@ type bridgeRequest struct {
 	Headers map[string]string `json:"headers"`
 	// HTTP Cookie 鍵值對集合
 	Cookies map[string]string `json:"cookies"`
-	// 用戶端來源 IP 位址
+	// 直接連線的用戶端 IP（取自 socket）
 	RemoteAddr string `json:"remote_addr"`
+	// 自動判斷的實際用戶端 IP（優先序：X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr）
+	IP string `json:"ip"`
 	// 請求參數集合（URL 查詢參數與 POST 表單資料）
 	Params map[string]string `json:"params"`
 	// HTTP 請求本文內容
@@ -135,6 +137,7 @@ func main() {
 			log.Printf("HTTP Method  : %s", req.Method)
 			log.Printf("HTTP Path    : %s", req.Path)
 			log.Printf("Remote Addr  : %s", req.RemoteAddr)
+			log.Printf("IP           : %s", req.IP)
 			log.Println("Headers      :")
 			for k, v := range req.Headers {
 				log.Printf("  %s: %s", k, v)

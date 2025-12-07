@@ -24,8 +24,10 @@ type BridgeRequest struct {
 	Headers map[string]string `json:"headers"`
 	// HTTP Cookie 鍵值對集合
 	Cookies map[string]string `json:"cookies"`
-	// 用戶端來源 IP 位址
+	// 直接連線的用戶端 IP（取自 socket）
 	RemoteAddr string `json:"remote_addr"`
+	// 自動判斷的實際用戶端 IP（優先序：X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr）
+	IP string `json:"ip"`
 	// 請求參數集合（URL 查詢參數與 POST 表單資料）
 	Params map[string]string `json:"params"`
 	// HTTP 請求本文內容
@@ -301,6 +303,21 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	}
 	if bridgeReq.Params == nil {
 		bridgeReq.Params = make(map[string]string)
+	}
+	// 自動判斷實際用戶端 IP：X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
+	if ip := bridgeReq.Headers["X-Real-Ip"]; ip != "" {
+		bridgeReq.IP = ip
+	} else if ip := bridgeReq.Headers["x-real-ip"]; ip != "" {
+		bridgeReq.IP = ip
+	} else if xff := bridgeReq.Headers["X-Forwarded-For"]; xff != "" {
+		bridgeReq.IP = strings.Split(xff, ",")[0]
+		bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
+	} else if xff := bridgeReq.Headers["x-forwarded-for"]; xff != "" {
+		bridgeReq.IP = strings.Split(xff, ",")[0]
+		bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
+	}
+	if bridgeReq.IP == "" {
+		bridgeReq.IP = bridgeReq.RemoteAddr
 	}
 
 	reqJSON, err := json.Marshal(bridgeReq)
