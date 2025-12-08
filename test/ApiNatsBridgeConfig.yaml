@@ -95,6 +95,12 @@ routes:
     methods: ["GET", "POST"]         # 允許的 HTTP 方法
     content_type: "application/json" # 要求的 Content-Type 前綴
     timeout: 60                      # NATS 等待微服務回應的逾時秒數
+    # 路由級別長度限制（可選，每項皆可選，會覆蓋 bridge.limits 的對應欄位）
+    limits:
+      body:
+        max_length: 65536            # 此路由僅接受最大 64KB 的請求本文
+      headers:
+        max_count: 32                # 此路由僅接受最多 32 個標頭
     schema_body:                     # JSON Schema 校驗規則（可選）
       root_type: object              #   控制鍵：根節點類型
       strict: true                   #   控制鍵：嚴格模式，拒絕未知欄位

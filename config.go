@@ -62,6 +62,8 @@ type RouteConfig struct {
 	ContentType string `json:"content_type,omitempty" yaml:"content_type,omitempty"`
 	// JSON Schema 校驗規則定義
 	SchemaBody map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
+	// 請求欄位長度限制規則（每項皆可選，會合併覆蓋 bridge.limits 對應欄位）
+	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {

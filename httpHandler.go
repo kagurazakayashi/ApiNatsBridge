@@ -134,8 +134,10 @@ type BridgeHandler struct {
 	routeSchemaMaps map[string]map[string]interface{}
 	// CDN 服務商對應的 IP 標頭清單
 	cdnHeaders []string
-	// 請求欄位長度限制規則
+	// 全域請求欄位長度限制規則
 	limits *LimitRule
+	// 各路徑的請求欄位長度限制規則
+	routeLimits map[string]*LimitRule
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -146,6 +148,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	contentTypeMap := make(map[string]string)
 	routeSchemas := make(map[string]*jsonschema.Schema)
 	routeSchemaMaps := make(map[string]map[string]interface{})
+	routeLimitsMap := make(map[string]*LimitRule)
 
 	compiler := jsonschema.NewCompiler()
 
@@ -160,6 +163,10 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		methodMap[r.Path] = allowed
 		if r.ContentType != "" {
 			contentTypeMap[r.Path] = r.ContentType
+		}
+		if r.Limits != nil {
+			routeLimitsMap[r.Path] = r.Limits
+			fmt.Printf("[BRIDGE] 路由 %s 已載入自訂長度限制\n", r.Path)
 		}
 		schemaMap := buildSchema(&r)
 		if schemaMap != nil {
@@ -194,18 +201,13 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		routeSchemaMaps:   routeSchemaMaps,
 		cdnHeaders:        cdnHeaders,
 		limits:            limits,
+		routeLimits:       routeLimitsMap,
 	}
 }
 
 // Handle 為 HTTP 請求的統一入口，依序檢查設定檔路由、硬編碼路由後回傳回應。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 	fmt.Printf("\n[BRIDGE] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
-
-	if h.limits != nil {
-		if resp := h.validateLimits(req); resp != nil {
-			return resp
-		}
-	}
 
 	if len(req.Params) > 0 {
 		fmt.Printf("[BRIDGE] HTTP 參數：%v\n", req.Params)
@@ -232,6 +234,17 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 				}
 			}
 		}
+
+		effectiveLimits := h.limits
+		if rl, has := h.routeLimits[req.Path]; has {
+			effectiveLimits = mergeLimitRule(h.limits, rl)
+		}
+		if effectiveLimits != nil {
+			if resp := h.validateLimits(req, effectiveLimits); resp != nil {
+				return resp
+			}
+		}
+
 		if ct, hasCT := h.routeContentTypes[req.Path]; hasCT && strings.HasPrefix(ct, "application/x-www-form-urlencoded") && len(req.Body) > 0 {
 			formValues, urlErr := url.ParseQuery(string(req.Body))
 			if urlErr != nil {
@@ -296,9 +309,53 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 	}
 }
 
+// mergeLimitRule 合併全域與路由層級的限制規則，路由層級非零值會覆蓋全域對應欄位。
+func mergeLimitRule(base, overlay *LimitRule) *LimitRule {
+	if overlay == nil {
+		return base
+	}
+	if base == nil {
+		return overlay
+	}
+	merged := *base
+	if overlay.Path.MaxLength > 0 {
+		merged.Path.MaxLength = overlay.Path.MaxLength
+	}
+	if overlay.Body.MaxLength > 0 {
+		merged.Body.MaxLength = overlay.Body.MaxLength
+	}
+	if overlay.Headers.MaxCount > 0 {
+		merged.Headers.MaxCount = overlay.Headers.MaxCount
+	}
+	if overlay.Headers.MaxKeyLen > 0 {
+		merged.Headers.MaxKeyLen = overlay.Headers.MaxKeyLen
+	}
+	if overlay.Headers.MaxValueLen > 0 {
+		merged.Headers.MaxValueLen = overlay.Headers.MaxValueLen
+	}
+	if overlay.Cookies.MaxCount > 0 {
+		merged.Cookies.MaxCount = overlay.Cookies.MaxCount
+	}
+	if overlay.Cookies.MaxKeyLen > 0 {
+		merged.Cookies.MaxKeyLen = overlay.Cookies.MaxKeyLen
+	}
+	if overlay.Cookies.MaxValueLen > 0 {
+		merged.Cookies.MaxValueLen = overlay.Cookies.MaxValueLen
+	}
+	if overlay.Params.MaxCount > 0 {
+		merged.Params.MaxCount = overlay.Params.MaxCount
+	}
+	if overlay.Params.MaxKeyLen > 0 {
+		merged.Params.MaxKeyLen = overlay.Params.MaxKeyLen
+	}
+	if overlay.Params.MaxValueLen > 0 {
+		merged.Params.MaxValueLen = overlay.Params.MaxValueLen
+	}
+	return &merged
+}
+
 // validateLimits 根據 LimitRule 檢查請求各欄位長度，不符合則回傳 400 錯誤。
-func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
-	r := h.limits
+func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRule) *nyaapiserver.HTTPResponse {
 
 	if r.Path.MaxLength > 0 && len(req.Path) > r.Path.MaxLength {
 		return nyaapiserver.JSONResponse(400, map[string]interface{}{
