@@ -491,6 +491,40 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 			bridgeReq.Params = make(map[string]string)
 		}
 		reqJSON, err = json.Marshal(bridgeReq)
+	} else if len(fields) == 1 {
+		for name := range fields {
+			switch name {
+			case "body":
+				reqJSON = req.Body
+			case "method":
+				reqJSON = []byte(req.Method)
+			case "path":
+				reqJSON = []byte(req.Path)
+			case "remote_addr":
+				reqJSON = []byte(req.RemoteAddr)
+			case "ip":
+				reqJSON = []byte(clientIP)
+			case "headers":
+				headers := req.Headers
+				if headers == nil {
+					headers = make(map[string]string)
+				}
+				reqJSON, err = json.Marshal(headers)
+			case "cookies":
+				cookies := req.Cookies
+				if cookies == nil {
+					cookies = make(map[string]string)
+				}
+				reqJSON, err = json.Marshal(cookies)
+			case "params":
+				params := req.Params
+				if params == nil {
+					params = make(map[string]string)
+				}
+				reqJSON, err = json.Marshal(params)
+			}
+			break
+		}
 	} else {
 		data := make(map[string]interface{})
 		include := func(name string) bool {

@@ -91,9 +91,9 @@ routes:
     content_type: "" # 要求的 Content-Type（空=不檢查）
     timeout: 10 # NATS 等待微服務回應的逾時秒數
     return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有
-      - path #   可選值：method, path, headers, cookies
-      - headers #          remote_addr, ip, params, body
+      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
+      - path #   可選值：本條就是所有可選值
+      - headers
       - cookies
       - remote_addr
       - ip
@@ -105,9 +105,9 @@ routes:
     content_type: "application/json" # 要求的 Content-Type 前綴
     timeout: 60 # NATS 等待微服務回應的逾時秒數
     return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有
-      - path #   可選值：method, path, headers, cookies
-      - headers #          remote_addr, ip, params, body
+      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
+      - path
+      - headers
       - cookies
       - remote_addr
       - ip
@@ -133,9 +133,9 @@ routes:
     content_type: "application/x-www-form-urlencoded"
     timeout: 60 # NATS 等待微服務回應的逾時秒數
     return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有
-      - path #   可選值：method, path, headers, cookies
-      - headers #          remote_addr, ip, params, body
+      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
+      - path
+      - headers
       - cookies
       - remote_addr
       - ip
