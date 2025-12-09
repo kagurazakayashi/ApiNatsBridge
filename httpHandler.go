@@ -138,6 +138,8 @@ type BridgeHandler struct {
 	limits *LimitRule
 	// 各路徑的請求欄位長度限制規則
 	routeLimits map[string]*LimitRule
+	// 各路徑的返回欄位集合（空集合表示返回全部）
+	routeReturnFields map[string]map[string]struct{}
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
@@ -149,11 +151,12 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemas := make(map[string]*jsonschema.Schema)
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
+	returnFieldsMap := make(map[string]map[string]struct{})
 
 	compiler := jsonschema.NewCompiler()
 
 	for _, r := range routes {
-		fmt.Printf("[BRIDGE] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType)
+		fmt.Printf("[BRIDGE] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q, return_fields=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType, r.ReturnFields)
 		routeMap[r.Path] = r.NatsSubject
 		timeoutMap[r.Path] = r.TimeoutDuration()
 		allowed := make(map[string]struct{})
@@ -167,6 +170,13 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		if r.Limits != nil {
 			routeLimitsMap[r.Path] = r.Limits
 			fmt.Printf("[BRIDGE] 路由 %s 已載入自訂長度限制\n", r.Path)
+		}
+		if len(r.ReturnFields) > 0 {
+			fieldSet := make(map[string]struct{}, len(r.ReturnFields))
+			for _, f := range r.ReturnFields {
+				fieldSet[f] = struct{}{}
+			}
+			returnFieldsMap[r.Path] = fieldSet
 		}
 		schemaMap := buildSchema(&r)
 		if schemaMap != nil {
@@ -192,16 +202,17 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	}
 	fmt.Printf("[BRIDGE] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
 	return &BridgeHandler{
-		natsClient:        natsClient,
-		routes:            routeMap,
-		routeTimeouts:     timeoutMap,
-		routeMethods:      methodMap,
-		routeContentTypes: contentTypeMap,
-		routeSchemas:      routeSchemas,
-		routeSchemaMaps:   routeSchemaMaps,
-		cdnHeaders:        cdnHeaders,
-		limits:            limits,
-		routeLimits:       routeLimitsMap,
+		natsClient:         natsClient,
+		routes:             routeMap,
+		routeTimeouts:      timeoutMap,
+		routeMethods:       methodMap,
+		routeContentTypes:  contentTypeMap,
+		routeSchemas:       routeSchemas,
+		routeSchemaMaps:    routeSchemaMaps,
+		cdnHeaders:         cdnHeaders,
+		limits:             limits,
+		routeLimits:        routeLimitsMap,
+		routeReturnFields:  returnFieldsMap,
 	}
 }
 
@@ -421,57 +432,110 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 	return nil
 }
 
-// forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
-func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
-	bridgeReq := BridgeRequest{
-		Method:     req.Method,
-		Path:       req.Path,
-		Headers:    req.Headers,
-		Cookies:    req.Cookies,
-		RemoteAddr: req.RemoteAddr,
-		Params:     req.Params,
-		Body:       string(req.Body),
-	}
-	if bridgeReq.Headers == nil {
-		bridgeReq.Headers = make(map[string]string)
-	}
-	if bridgeReq.Cookies == nil {
-		bridgeReq.Cookies = make(map[string]string)
-	}
-	if bridgeReq.Params == nil {
-		bridgeReq.Params = make(map[string]string)
-	}
-	// 自動判斷實際用戶端 IP
-	// 優先序：CDN 標頭 > X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
+// resolveClientIP 從請求標頭中判斷實際用戶端 IP。
+// 優先序：CDN 標頭 > X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
+func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr string) string {
 	for _, header := range h.cdnHeaders {
-		if ip, ok := bridgeReq.Headers[header]; ok && ip != "" {
-			bridgeReq.IP = ip
-			break
+		if ip, ok := headers[header]; ok && ip != "" {
+			return ip
 		}
 		lower := strings.ToLower(header)
-		if ip, ok := bridgeReq.Headers[lower]; ok && ip != "" {
-			bridgeReq.IP = ip
-			break
+		if ip, ok := headers[lower]; ok && ip != "" {
+			return ip
 		}
 	}
-	if bridgeReq.IP == "" {
-		if ip := bridgeReq.Headers["X-Real-Ip"]; ip != "" {
-			bridgeReq.IP = ip
-		} else if ip := bridgeReq.Headers["x-real-ip"]; ip != "" {
-			bridgeReq.IP = ip
-		} else if xff := bridgeReq.Headers["X-Forwarded-For"]; xff != "" {
-			bridgeReq.IP = strings.Split(xff, ",")[0]
-			bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
-		} else if xff := bridgeReq.Headers["x-forwarded-for"]; xff != "" {
-			bridgeReq.IP = strings.Split(xff, ",")[0]
-			bridgeReq.IP = strings.TrimSpace(bridgeReq.IP)
-		}
+	if ip := headers["X-Real-Ip"]; ip != "" {
+		return ip
 	}
-	if bridgeReq.IP == "" {
-		bridgeReq.IP = bridgeReq.RemoteAddr
+	if ip := headers["x-real-ip"]; ip != "" {
+		return ip
+	}
+	if xff := headers["X-Forwarded-For"]; xff != "" {
+		ip := strings.Split(xff, ",")[0]
+		return strings.TrimSpace(ip)
+	}
+	if xff := headers["x-forwarded-for"]; xff != "" {
+		ip := strings.Split(xff, ",")[0]
+		return strings.TrimSpace(ip)
+	}
+	return remoteAddr
+}
+
+// forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
+// 若路由設定了 return_fields，則只包含指定欄位；未設定或空陣列則包含全部欄位。
+func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
+	fields, hasFields := h.routeReturnFields[req.Path]
+	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
+
+	var reqJSON []byte
+	var err error
+
+	if !hasFields {
+		bridgeReq := BridgeRequest{
+			Method:     req.Method,
+			Path:       req.Path,
+			Headers:    req.Headers,
+			Cookies:    req.Cookies,
+			RemoteAddr: req.RemoteAddr,
+			IP:         clientIP,
+			Params:     req.Params,
+			Body:       string(req.Body),
+		}
+		if bridgeReq.Headers == nil {
+			bridgeReq.Headers = make(map[string]string)
+		}
+		if bridgeReq.Cookies == nil {
+			bridgeReq.Cookies = make(map[string]string)
+		}
+		if bridgeReq.Params == nil {
+			bridgeReq.Params = make(map[string]string)
+		}
+		reqJSON, err = json.Marshal(bridgeReq)
+	} else {
+		data := make(map[string]interface{})
+		include := func(name string) bool {
+			_, ok := fields[name]
+			return ok
+		}
+		if include("method") {
+			data["method"] = req.Method
+		}
+		if include("path") {
+			data["path"] = req.Path
+		}
+		if include("headers") {
+			headers := req.Headers
+			if headers == nil {
+				headers = make(map[string]string)
+			}
+			data["headers"] = headers
+		}
+		if include("cookies") {
+			cookies := req.Cookies
+			if cookies == nil {
+				cookies = make(map[string]string)
+			}
+			data["cookies"] = cookies
+		}
+		if include("remote_addr") {
+			data["remote_addr"] = req.RemoteAddr
+		}
+		if include("ip") {
+			data["ip"] = clientIP
+		}
+		if include("params") {
+			params := req.Params
+			if params == nil {
+				params = make(map[string]string)
+			}
+			data["params"] = params
+		}
+		if include("body") {
+			data["body"] = string(req.Body)
+		}
+		reqJSON, err = json.Marshal(data)
 	}
 
-	reqJSON, err := json.Marshal(bridgeReq)
 	if err != nil {
 		fmt.Printf("[BRIDGE] BridgeRequest 序列化失敗: %v\n", err)
 		return nyaapiserver.JSONResponse(500, map[string]string{

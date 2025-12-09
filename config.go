@@ -64,6 +64,9 @@ type RouteConfig struct {
 	SchemaBody map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
 	// 請求欄位長度限制規則（每項皆可選，會合併覆蓋 bridge.limits 對應欄位）
 	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
+	// 轉發到 NATS 時要包含的欄位清單，可選值：method, path, headers, cookies, remote_addr, ip, params, body
+	// 留空陣列或不提供則返回所有欄位
+	ReturnFields []string `json:"return_fields,omitempty" yaml:"return_fields,omitempty"`
 }
 
 func (r *RouteConfig) TimeoutDuration() time.Duration {
