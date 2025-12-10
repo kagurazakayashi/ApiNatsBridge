@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -432,33 +433,53 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 	return nil
 }
 
-// resolveClientIP 從請求標頭中判斷實際用戶端 IP。
-// 優先序：CDN 標頭 > X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr
+// isValidIP 檢查字串是否為有效的 IPv4 或 IPv6 位址。
+func isValidIP(s string) bool {
+	return net.ParseIP(strings.TrimSpace(s)) != nil
+}
+
+// resolveClientIP 從請求標頭中判斷實際用戶端 IP，所有來源均須通過 IP 格式驗證。
+// 優先序：CDN 標頭 > X-Real-IP > X-Forwarded-For 第一段合法 IP > RemoteAddr
+// 若無人通過 IP 格式驗證，則回傳空字串。
 func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr string) string {
 	for _, header := range h.cdnHeaders {
-		if ip, ok := headers[header]; ok && ip != "" {
+		if ip, ok := headers[header]; ok && ip != "" && isValidIP(ip) {
 			return ip
 		}
 		lower := strings.ToLower(header)
-		if ip, ok := headers[lower]; ok && ip != "" {
+		if ip, ok := headers[lower]; ok && ip != "" && isValidIP(ip) {
 			return ip
 		}
 	}
-	if ip := headers["X-Real-Ip"]; ip != "" {
+	if ip := headers["X-Real-Ip"]; ip != "" && isValidIP(ip) {
 		return ip
 	}
-	if ip := headers["x-real-ip"]; ip != "" {
+	if ip := headers["x-real-ip"]; ip != "" && isValidIP(ip) {
 		return ip
 	}
 	if xff := headers["X-Forwarded-For"]; xff != "" {
-		ip := strings.Split(xff, ",")[0]
-		return strings.TrimSpace(ip)
+		for _, ip := range strings.Split(xff, ",") {
+			ip = strings.TrimSpace(ip)
+			if ip != "" && isValidIP(ip) {
+				return ip
+			}
+		}
 	}
 	if xff := headers["x-forwarded-for"]; xff != "" {
-		ip := strings.Split(xff, ",")[0]
-		return strings.TrimSpace(ip)
+		for _, ip := range strings.Split(xff, ",") {
+			ip = strings.TrimSpace(ip)
+			if ip != "" && isValidIP(ip) {
+				return ip
+			}
+		}
 	}
-	return remoteAddr
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		remoteAddr = host
+	}
+	if isValidIP(remoteAddr) {
+		return remoteAddr
+	}
+	return ""
 }
 
 // forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
@@ -466,6 +487,9 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
 	fields, hasFields := h.routeReturnFields[req.Path]
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
+	if clientIP == "" {
+		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte("Bad Request: unable to resolve client IP")}
+	}
 
 	var reqJSON []byte
 	var err error
