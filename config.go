@@ -46,6 +46,8 @@ type BridgeConfig struct {
 	CdnHeader []string `json:"cdnheader" yaml:"cdnheader"`
 	// 請求欄位長度限制規則
 	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
+	// 允許接收錯誤詳細資訊的 IP 白名單（用於開發除錯）
+	ErrorDetailIPs []string `json:"error_detail_ips,omitempty" yaml:"error_detail_ips,omitempty"`
 }
 
 // RouteConfig 定義單一路由的轉發規則。

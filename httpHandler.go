@@ -141,10 +141,12 @@ type BridgeHandler struct {
 	routeLimits map[string]*LimitRule
 	// 各路徑的返回欄位集合（空集合表示返回全部）
 	routeReturnFields map[string]map[string]struct{}
+	// 允許接收錯誤詳細資訊的 IP 集合
+	errorDetailIPs map[string]struct{}
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, errorDetailIPs []string) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
@@ -153,6 +155,11 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
 	returnFieldsMap := make(map[string]map[string]struct{})
+
+	errorIPSet := make(map[string]struct{}, len(errorDetailIPs))
+	for _, ip := range errorDetailIPs {
+		errorIPSet[ip] = struct{}{}
+	}
 
 	compiler := jsonschema.NewCompiler()
 
@@ -214,6 +221,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		limits:             limits,
 		routeLimits:        routeLimitsMap,
 		routeReturnFields:  returnFieldsMap,
+		errorDetailIPs:     errorIPSet,
 	}
 }
 
@@ -227,6 +235,12 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 
 	if len(req.Cookies) > 0 {
 		fmt.Printf("[BRIDGE] HTTP Cookie：%v\n", req.Cookies)
+	}
+
+	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
+	if clientIP == "" {
+		fmt.Printf("[BRIDGE] 無法解析用戶端 IP\n")
+		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte("Bad Request: unable to resolve client IP")}
 	}
 
 	if natsSubject, ok := h.routes[req.Path]; ok {
@@ -260,10 +274,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 		if ct, hasCT := h.routeContentTypes[req.Path]; hasCT && strings.HasPrefix(ct, "application/x-www-form-urlencoded") && len(req.Body) > 0 {
 			formValues, urlErr := url.ParseQuery(string(req.Body))
 			if urlErr != nil {
-				return nyaapiserver.JSONResponse(400, map[string]interface{}{
-					"error":  "Invalid form body",
-					"detail": urlErr.Error(),
-				})
+				return h.errResp(400, "Invalid form body", urlErr.Error(), clientIP)
 			}
 			formMap := make(map[string]interface{}, len(formValues))
 			for k, v := range formValues {
@@ -279,10 +290,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 				if err := schema.Validate(formMap); err != nil {
 					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
-					return nyaapiserver.JSONResponse(400, map[string]interface{}{
-						"error":  "Schema validation failed",
-						"detail": err.Error(),
-					})
+					return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 				}
 			}
 			jsonBody, jsonErr := json.Marshal(formMap)
@@ -292,25 +300,19 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 				})
 			}
 			req.Body = jsonBody
-			return h.forwardToNats(req, natsSubject)
+			return h.forwardToNats(req, natsSubject, clientIP)
 		}
 		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema && len(req.Body) > 0 {
 			var bodyJSON interface{}
 			if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
-				return nyaapiserver.JSONResponse(400, map[string]interface{}{
-					"error":  "Invalid JSON body",
-					"detail": err.Error(),
-				})
+				return h.errResp(400, "Invalid JSON body", err.Error(), clientIP)
 			}
 			if err := schema.Validate(bodyJSON); err != nil {
 				fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
-				return nyaapiserver.JSONResponse(400, map[string]interface{}{
-					"error":  "Schema validation failed",
-					"detail": err.Error(),
-				})
+				return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 			}
 		}
-		return h.forwardToNats(req, natsSubject)
+		return h.forwardToNats(req, natsSubject, clientIP)
 	}
 
 	switch req.Path {
@@ -482,14 +484,35 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 	return ""
 }
 
+// isErrorDetailIP 檢查 IP 是否在錯誤詳細資訊白名單中。
+func (h *BridgeHandler) isErrorDetailIP(ip string) bool {
+	if ip == "" {
+		return false
+	}
+	_, ok := h.errorDetailIPs[ip]
+	return ok
+}
+
+// errResp 建立錯誤回應，白名單 IP 可以看到詳細原因，其他 IP 只會看到通用訊息。
+// detail 會同時輸出到控制台日誌。
+func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clientIP string) *nyaapiserver.HTTPResponse {
+	if detail != "" {
+		fmt.Printf("[BRIDGE] %s: %s\n", msg, detail)
+	}
+	if h.isErrorDetailIP(clientIP) && detail != "" {
+		return nyaapiserver.JSONResponse(statusCode, map[string]interface{}{
+			"error": msg, "detail": detail,
+		})
+	}
+	return nyaapiserver.JSONResponse(statusCode, map[string]string{
+		"error": msg,
+	})
+}
+
 // forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
 // 若路由設定了 return_fields，則只包含指定欄位；未設定或空陣列則包含全部欄位。
-func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string) *nyaapiserver.HTTPResponse {
+func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string, clientIP string) *nyaapiserver.HTTPResponse {
 	fields, hasFields := h.routeReturnFields[req.Path]
-	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
-	if clientIP == "" {
-		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte("Bad Request: unable to resolve client IP")}
-	}
 
 	var reqJSON []byte
 	var err error
@@ -595,20 +618,14 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	}
 
 	if err != nil {
-		fmt.Printf("[BRIDGE] BridgeRequest 序列化失敗: %v\n", err)
-		return nyaapiserver.JSONResponse(500, map[string]string{
-			"error": "Internal Server Error: failed to marshal request",
-		})
+		return h.errResp(500, "Internal Server Error: failed to marshal request", err.Error(), clientIP)
 	}
 
 	timeout := h.routeTimeouts[req.Path]
 	fmt.Printf("[BRIDGE] 轉發請求到 NATS: subject=%s, timeout=%v\n", natsSubject, timeout)
 	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
-		fmt.Printf("[BRIDGE] NATS 請求失敗: %v\n", err)
-		return nyaapiserver.JSONResponse(502, map[string]string{
-			"error": fmt.Sprintf("Bad Gateway: NATS request failed: %v", err),
-		})
+		return h.errResp(502, "Bad Gateway: NATS request failed", err.Error(), clientIP)
 	}
 
 	var bridgeResp BridgeResponse

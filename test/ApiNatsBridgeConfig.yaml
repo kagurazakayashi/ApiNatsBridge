@@ -64,6 +64,11 @@ bridge:
     - "Ali-Cdn-Real-Ip" # 阿里雲 CDN / DCDN / 全站加速
     - "Ar-Real-IP" # ArvanCloud
 
+  # 允許接收錯誤詳細資訊的 IP 白名單（用於開發除錯）
+  error_detail_ips:
+    - "127.0.0.1"
+    - "::1"
+
   # 請求欄位長度限制（0 或省略表示不限制）
   limits:
     path:
