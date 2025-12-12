@@ -119,7 +119,8 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 
 func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
 	var configPath string
-	flag.StringVar(&configPath, "c", "", "yaml/json config file")
+	flag.StringVar(&configPath, "c", "", "yaml/config file")
+	flag.BoolVar(&verbose, "v", false, "verbose: log full request data")
 	flag.Parse()
 	configPath, appConfig, appConfigErr := loadConfigFile(configPath)
 	fmt.Printf("[main] Config File: %s\n", configPath)

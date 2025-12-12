@@ -12,6 +12,8 @@ import (
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 )
 
+var verbose bool
+
 func main() {
 
 	isOK, httpAPIServerConfig, natsConfig, bridgeConfig, routes := LoadConfig()

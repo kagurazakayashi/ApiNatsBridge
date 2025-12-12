@@ -230,11 +230,19 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 	fmt.Printf("\n[BRIDGE] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
 
 	if len(req.Params) > 0 {
-		fmt.Printf("[BRIDGE] HTTP 參數：%v\n", req.Params)
+		if verbose {
+			fmt.Printf("[BRIDGE] HTTP 參數：%v\n", req.Params)
+		} else {
+			fmt.Printf("[BRIDGE] HTTP 參數：%d 項\n", len(req.Params))
+		}
 	}
 
 	if len(req.Cookies) > 0 {
-		fmt.Printf("[BRIDGE] HTTP Cookie：%v\n", req.Cookies)
+		if verbose {
+			fmt.Printf("[BRIDGE] HTTP Cookie：%v\n", req.Cookies)
+		} else {
+			fmt.Printf("[BRIDGE] HTTP Cookie：%d 項\n", len(req.Cookies))
+		}
 	}
 
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
@@ -289,7 +297,11 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 			}
 			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 				if err := schema.Validate(formMap); err != nil {
-					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+					if verbose {
+						fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+					} else {
+						fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s\n", req.Path)
+					}
 					return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 				}
 			}
@@ -308,7 +320,11 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 				return h.errResp(400, "Invalid JSON body", err.Error(), clientIP)
 			}
 			if err := schema.Validate(bodyJSON); err != nil {
-				fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+				if verbose {
+					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+				} else {
+					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s\n", req.Path)
+				}
 				return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 			}
 		}
@@ -497,7 +513,11 @@ func (h *BridgeHandler) isErrorDetailIP(ip string) bool {
 // detail 會同時輸出到控制台日誌。
 func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clientIP string) *nyaapiserver.HTTPResponse {
 	if detail != "" {
-		fmt.Printf("[BRIDGE] %s: %s\n", msg, detail)
+		if verbose {
+			fmt.Printf("[BRIDGE] %s: %s\n", msg, detail)
+		} else {
+			fmt.Printf("[BRIDGE] %s\n", msg)
+		}
 	}
 	if h.isErrorDetailIP(clientIP) && detail != "" {
 		return nyaapiserver.JSONResponse(statusCode, map[string]interface{}{
@@ -630,7 +650,11 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	var bridgeResp BridgeResponse
 	if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
-		fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v, 原始回應: %s\n", err, respStr)
+		if verbose {
+			fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v, 原始回應: %s\n", err, respStr)
+		} else {
+			fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v\n", err)
+		}
 		return &nyaapiserver.HTTPResponse{
 			StatusCode: 200,
 			Body:       []byte(respStr),
