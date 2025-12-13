@@ -35,7 +35,7 @@ func main() {
 		return
 	}
 
-	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ErrorDetailIPs)
+	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ErrorDetailIPs, bridgeConfig.CookieUUIDKey)
 	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, handler.Handle, httpLogger)
 
 	go func() {

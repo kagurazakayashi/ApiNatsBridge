@@ -1,6 +1,7 @@
 *.syso
 *.log
 *.exe
+AGENTS.md
 # l10n/app_localizations*.go
 nats-server\nats_data
 

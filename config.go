@@ -48,6 +48,8 @@ type BridgeConfig struct {
 	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
 	// 允許接收錯誤詳細資訊的 IP 白名單（用於開發除錯）
 	ErrorDetailIPs []string `json:"error_detail_ips,omitempty" yaml:"error_detail_ips,omitempty"`
+	// 自動為用戶端 Cookie 寫入 UUID 的鍵名，留空則不啟用
+	CookieUUIDKey string `json:"cookie_uuid_key,omitempty" yaml:"cookie_uuid_key,omitempty"`
 }
 
 // RouteConfig 定義單一路由的轉發規則。

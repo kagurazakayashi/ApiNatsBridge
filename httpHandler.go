@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -143,10 +144,12 @@ type BridgeHandler struct {
 	routeReturnFields map[string]map[string]struct{}
 	// 允許接收錯誤詳細資訊的 IP 集合
 	errorDetailIPs map[string]struct{}
+	// 自動為用戶端 Cookie 寫入 UUID 的鍵名，空字串表示不啟用
+	cookieUUIDKey string
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, errorDetailIPs []string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, errorDetailIPs []string, cookieUUIDKey string) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
@@ -209,6 +212,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		}
 	}
 	fmt.Printf("[BRIDGE] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
+	if cookieUUIDKey != "" {
+		fmt.Printf("[BRIDGE] 已啟用自動 UUID Cookie，鍵名: %s\n", cookieUUIDKey)
+	}
 	return &BridgeHandler{
 		natsClient:         natsClient,
 		routes:             routeMap,
@@ -222,11 +228,40 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		routeLimits:        routeLimitsMap,
 		routeReturnFields:  returnFieldsMap,
 		errorDetailIPs:     errorIPSet,
+		cookieUUIDKey:      cookieUUIDKey,
 	}
 }
 
 // Handle 為 HTTP 請求的統一入口，依序檢查設定檔路由、硬編碼路由後回傳回應。
+// 若設定了 cookie_uuid_key，會自動在回應中寫入 UUID Cookie。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
+	var newUUID string
+	if h.cookieUUIDKey != "" {
+		if req.Cookies == nil {
+			req.Cookies = make(map[string]string)
+		}
+		if _, exists := req.Cookies[h.cookieUUIDKey]; !exists {
+			newUUID = strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
+			req.Cookies[h.cookieUUIDKey] = newUUID
+			if verbose {
+				fmt.Printf("[BRIDGE] 為用戶端產生新 UUID Cookie: %s=%s\n", h.cookieUUIDKey, newUUID)
+			} else {
+				fmt.Printf("[BRIDGE] 為用戶端產生新 UUID Cookie: %s\n", h.cookieUUIDKey)
+			}
+		}
+	}
+	resp := h.handleRequest(req)
+	if newUUID != "" && resp != nil {
+		if resp.Headers == nil {
+			resp.Headers = make(map[string]string)
+		}
+		resp.Headers["Set-Cookie"] = h.cookieUUIDKey + "=" + newUUID + "; Path=/; HttpOnly"
+	}
+	return resp
+}
+
+// handleRequest 為 HTTP 請求的實際處理邏輯。
+func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 	fmt.Printf("\n[BRIDGE] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
 
 	if len(req.Params) > 0 {
