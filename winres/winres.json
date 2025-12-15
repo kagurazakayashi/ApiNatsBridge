@@ -1,0 +1,56 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": [
+        "../ico/icon.png"
+      ]
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "1.0.0.0",
+          "product_version": "1.0.0.0"
+        },
+        "info": {
+          "0409": {
+            "CompanyName": "MasaeProject",
+            "FileDescription": "HTTP-to-NATS Gateway Bridge",
+            "FileVersion": "1.0.0.0",
+            "InternalName": "ApiNatsBridge",
+            "LegalCopyright": "Copyright (c) kagurazakayashi. Licensed under Mulan PSL v2.",
+            "OriginalFilename": "ApiNatsBridge.exe",
+            "ProductName": "ApiNatsBridge",
+            "ProductVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": {
+          "name": "MasaeProject.ApiNatsBridge",
+          "version": "1.0.0.0"
+        },
+        "description": "HTTP-to-NATS Gateway Bridge",
+        "minimum-os": "vista",
+        "execution-level": "asInvoker",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "disable-theming": false,
+        "disable-window-filtering": false,
+        "high-resolution-scrolling-aware": false,
+        "ultra-high-resolution-scrolling-aware": false,
+        "long-path-aware": true,
+        "printer-driver-isolation": false,
+        "gdi-scaling": false,
+        "segment-heap": false,
+        "use-common-controls-v6": false
+      }
+    }
+  }
+}
