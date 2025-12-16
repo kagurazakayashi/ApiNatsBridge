@@ -28,6 +28,8 @@ ECHO *** Starting ApiNatsBridge ***
 START "ApiNatsBridge" go run . -c test\ApiNatsBridgeConfig.yaml
 TIMEOUT /T 5 /NOBREAK >NUL
 
+exit
+
 ECHO.
 ECHO *** Running HTTP Tests ***
 ECHO.
@@ -43,6 +45,5 @@ ECHO.
 
 ECHO ============================================
 ECHO   Test script finished.
-ECHO   Close the service windows to exit.
 ECHO ============================================
 ECHO.

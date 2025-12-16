@@ -46,6 +46,8 @@ type BridgeConfig struct {
 	CdnHeader []string `json:"cdnheader" yaml:"cdnheader"`
 	// 請求欄位長度限制規則
 	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
+	// 回應欄位長度限制規則
+	ResponseLimits *LimitRule `json:"response_limits,omitempty" yaml:"response_limits,omitempty"`
 	// 允許接收錯誤詳細資訊的 IP 白名單（用於開發除錯）
 	ErrorDetailIPs []string `json:"error_detail_ips,omitempty" yaml:"error_detail_ips,omitempty"`
 	// 自動為用戶端 Cookie 寫入 UUID 的鍵名，留空則不啟用
@@ -68,6 +70,10 @@ type RouteConfig struct {
 	SchemaBody map[string]interface{} `json:"schema_body,omitempty" yaml:"schema_body,omitempty"`
 	// 請求欄位長度限制規則（每項皆可選，會合併覆蓋 bridge.limits 對應欄位）
 	Limits *LimitRule `json:"limits,omitempty" yaml:"limits,omitempty"`
+	// 回應 JSON Schema 校驗規則定義
+	ResponseSchemaBody map[string]interface{} `json:"response_schema_body,omitempty" yaml:"response_schema_body,omitempty"`
+	// 回應欄位長度限制規則（每項皆可選，會合併覆蓋 bridge.response_limits 對應欄位）
+	ResponseLimits *LimitRule `json:"response_limits,omitempty" yaml:"response_limits,omitempty"`
 	// 轉發到 NATS 時要包含的欄位清單，可選值：method, path, headers, cookies, remote_addr, ip, params, body
 	// 留空陣列或不提供則返回所有欄位
 	ReturnFields []string `json:"return_fields,omitempty" yaml:"return_fields,omitempty"`

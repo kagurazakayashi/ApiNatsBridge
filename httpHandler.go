@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -46,13 +45,13 @@ type BridgeResponse struct {
 	Body string `json:"body"`
 }
 
-// buildSchema 從 schema_body 中提取控制鍵（root_type、strict），其餘作為 JSON Schema 傳遞。
-func buildSchema(r *RouteConfig) map[string]interface{} {
-	if r.SchemaBody == nil {
+// buildSchemaFromMap 從 schema_body map 中提取控制鍵（root_type、strict），其餘作為 JSON Schema 傳遞。
+func buildSchemaFromMap(schemaBody map[string]interface{}) map[string]interface{} {
+	if schemaBody == nil {
 		return nil
 	}
-	m := make(map[string]interface{}, len(r.SchemaBody))
-	for k, v := range r.SchemaBody {
+	m := make(map[string]interface{}, len(schemaBody))
+	for k, v := range schemaBody {
 		m[k] = v
 	}
 	if rootType, ok := m["root_type"]; ok {
@@ -68,6 +67,11 @@ func buildSchema(r *RouteConfig) map[string]interface{} {
 		}
 	}
 	return m
+}
+
+// buildSchema 從 RouteConfig 的 schema_body 建立 JSON Schema。
+func buildSchema(r *RouteConfig) map[string]interface{} {
+	return buildSchemaFromMap(r.SchemaBody)
 }
 func coerceFormValues(formMap map[string]interface{}, schemaMap map[string]interface{}) {
 	props, ok := schemaMap["properties"]
@@ -142,6 +146,14 @@ type BridgeHandler struct {
 	routeLimits map[string]*LimitRule
 	// 各路徑的返回欄位集合（空集合表示返回全部）
 	routeReturnFields map[string]map[string]struct{}
+	// 各路徑的回應 JSON Schema 編譯結果
+	routeResponseSchemas map[string]*jsonschema.Schema
+	// 各路徑的回應原始 Schema 對應表
+	routeResponseSchemaMaps map[string]map[string]interface{}
+	// 全域回應欄位長度限制規則
+	responseLimits *LimitRule
+	// 各路徑的回應欄位長度限制規則
+	routeResponseLimits map[string]*LimitRule
 	// 允許接收錯誤詳細資訊的 IP 集合
 	errorDetailIPs map[string]struct{}
 	// 自動為用戶端 Cookie 寫入 UUID 的鍵名，空字串表示不啟用
@@ -149,7 +161,7 @@ type BridgeHandler struct {
 }
 
 // NewBridgeHandler 根據路由設定建立一個新的 BridgeHandler。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, errorDetailIPs []string, cookieUUIDKey string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, cookieUUIDKey string) *BridgeHandler {
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
 	methodMap := make(map[string]map[string]struct{})
@@ -158,6 +170,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
 	returnFieldsMap := make(map[string]map[string]struct{})
+	routeResponseSchemas := make(map[string]*jsonschema.Schema)
+	routeResponseSchemaMaps := make(map[string]map[string]interface{})
+	routeResponseLimitsMap := make(map[string]*LimitRule)
 
 	errorIPSet := make(map[string]struct{}, len(errorDetailIPs))
 	for _, ip := range errorDetailIPs {
@@ -192,23 +207,38 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		schemaMap := buildSchema(&r)
 		if schemaMap != nil {
 			routeSchemaMaps[r.Path] = schemaMap
-			schemaJSON, jsonErr := json.Marshal(schemaMap)
-			if jsonErr != nil {
-				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 序列化失敗: %v\n", r.Path, jsonErr)
-				continue
-			}
 			url := "config://routes" + r.Path
-			if err := compiler.AddResource(url, bytes.NewReader(schemaJSON)); err != nil {
-				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
-				continue
-			}
+		if err := compiler.AddResource(url, schemaMap); err != nil {
+			fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
+			continue
+		}
+		schema, err := compiler.Compile(url)
+		if err != nil {
+			fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
+			continue
+		}
+		routeSchemas[r.Path] = schema
+		fmt.Printf("[BRIDGE] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
+	}
+	if r.ResponseLimits != nil {
+		routeResponseLimitsMap[r.Path] = r.ResponseLimits
+		fmt.Printf("[BRIDGE] 路由 %s 已載入回應自訂長度限制\n", r.Path)
+	}
+	responseSchemaMap := buildSchemaFromMap(r.ResponseSchemaBody)
+	if responseSchemaMap != nil {
+		routeResponseSchemaMaps[r.Path] = responseSchemaMap
+		url := "config://routes" + r.Path + "/response"
+		if err := compiler.AddResource(url, responseSchemaMap); err != nil {
+			fmt.Printf("[BRIDGE] 路由 %s 的 response_schema_body 資源添加失敗: %v\n", r.Path, err)
+			continue
+		}
 			schema, err := compiler.Compile(url)
 			if err != nil {
-				fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
+				fmt.Printf("[BRIDGE] 路由 %s 的 response_schema_body 無效: %v\n", r.Path, err)
 				continue
 			}
-			routeSchemas[r.Path] = schema
-			fmt.Printf("[BRIDGE] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
+			routeResponseSchemas[r.Path] = schema
+			fmt.Printf("[BRIDGE] 路由 %s 已載入回應 JSON Schema 校驗\n", r.Path)
 		}
 	}
 	fmt.Printf("[BRIDGE] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
@@ -216,19 +246,23 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		fmt.Printf("[BRIDGE] 已啟用自動 UUID Cookie，鍵名: %s\n", cookieUUIDKey)
 	}
 	return &BridgeHandler{
-		natsClient:         natsClient,
-		routes:             routeMap,
-		routeTimeouts:      timeoutMap,
-		routeMethods:       methodMap,
-		routeContentTypes:  contentTypeMap,
-		routeSchemas:       routeSchemas,
-		routeSchemaMaps:    routeSchemaMaps,
-		cdnHeaders:         cdnHeaders,
-		limits:             limits,
-		routeLimits:        routeLimitsMap,
-		routeReturnFields:  returnFieldsMap,
-		errorDetailIPs:     errorIPSet,
-		cookieUUIDKey:      cookieUUIDKey,
+		natsClient:               natsClient,
+		routes:                   routeMap,
+		routeTimeouts:            timeoutMap,
+		routeMethods:             methodMap,
+		routeContentTypes:        contentTypeMap,
+		routeSchemas:             routeSchemas,
+		routeSchemaMaps:          routeSchemaMaps,
+		cdnHeaders:               cdnHeaders,
+		limits:                   limits,
+		routeLimits:              routeLimitsMap,
+		routeReturnFields:        returnFieldsMap,
+		routeResponseSchemas:     routeResponseSchemas,
+		routeResponseSchemaMaps:  routeResponseSchemaMaps,
+		responseLimits:           responseLimits,
+		routeResponseLimits:      routeResponseLimitsMap,
+		errorDetailIPs:           errorIPSet,
+		cookieUUIDKey:            cookieUUIDKey,
 	}
 }
 
@@ -314,12 +348,14 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			}
 		}
 
-		if ct, hasCT := h.routeContentTypes[req.Path]; hasCT && strings.HasPrefix(ct, "application/x-www-form-urlencoded") && len(req.Body) > 0 {
+	if ct, hasCT := h.routeContentTypes[req.Path]; hasCT && strings.HasPrefix(ct, "application/x-www-form-urlencoded") && (len(req.Body) > 0 || len(req.Params) > 0) {
+		var formMap map[string]interface{}
+		if len(req.Body) > 0 {
 			formValues, urlErr := url.ParseQuery(string(req.Body))
 			if urlErr != nil {
 				return h.errResp(400, "Invalid form body", urlErr.Error(), clientIP)
 			}
-			formMap := make(map[string]interface{}, len(formValues))
+			formMap = make(map[string]interface{}, len(formValues))
 			for k, v := range formValues {
 				if len(v) == 1 {
 					formMap[k] = v[0]
@@ -327,11 +363,17 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 					formMap[k] = v
 				}
 			}
+		} else {
+			formMap = make(map[string]interface{}, len(req.Params))
+			for k, v := range req.Params {
+				formMap[k] = v
+			}
+		}
 			if schemaMap, ok := h.routeSchemaMaps[req.Path]; ok {
 				coerceFormValues(formMap, schemaMap)
 			}
-			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
-				if err := schema.Validate(formMap); err != nil {
+		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
+			if err := schema.Validate(formMap); err != nil {
 					if verbose {
 						fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
 					} else {
@@ -564,6 +606,50 @@ func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clien
 	})
 }
 
+// validateResponse 驗證從 NATS 微服務回傳的回應資料是否符合設定規則。
+func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clientIP string) *nyaapiserver.HTTPResponse {
+	effectiveLimits := h.responseLimits
+	if rl, has := h.routeResponseLimits[path]; has {
+		effectiveLimits = mergeLimitRule(h.responseLimits, rl)
+	}
+	if effectiveLimits != nil {
+		if effectiveLimits.Body.MaxLength > 0 && len(resp.Body) > effectiveLimits.Body.MaxLength {
+			return h.errResp(502, "Response body too long",
+				fmt.Sprintf("body length %d exceeds limit %d", len(resp.Body), effectiveLimits.Body.MaxLength), clientIP)
+		}
+		rule := effectiveLimits.Headers
+		if rule.MaxCount > 0 && len(resp.Headers) > rule.MaxCount {
+			return h.errResp(502, "Response headers too many",
+				fmt.Sprintf("count %d exceeds limit %d", len(resp.Headers), rule.MaxCount), clientIP)
+		}
+		for k, v := range resp.Headers {
+			if rule.MaxKeyLen > 0 && len(k) > rule.MaxKeyLen {
+				return h.errResp(502, "Response header key too long",
+					fmt.Sprintf("key=%s length %d exceeds limit %d", k, len(k), rule.MaxKeyLen), clientIP)
+			}
+			if rule.MaxValueLen > 0 && len(v) > rule.MaxValueLen {
+				return h.errResp(502, "Response header value too long",
+					fmt.Sprintf("key=%s value length %d exceeds limit %d", k, len(v), rule.MaxValueLen), clientIP)
+			}
+		}
+	}
+	if schema, hasSchema := h.routeResponseSchemas[path]; hasSchema && len(resp.Body) > 0 {
+		var bodyJSON interface{}
+		if err := json.Unmarshal([]byte(resp.Body), &bodyJSON); err != nil {
+			return h.errResp(502, "Response body is not valid JSON", err.Error(), clientIP)
+		}
+		if err := schema.Validate(bodyJSON); err != nil {
+			if verbose {
+				fmt.Printf("[BRIDGE] 回應 Schema 校驗失敗 for %s: %v\n", path, err)
+			} else {
+				fmt.Printf("[BRIDGE] 回應 Schema 校驗失敗 for %s\n", path)
+			}
+			return h.errResp(502, "Response schema validation failed", err.Error(), clientIP)
+		}
+	}
+	return nil
+}
+
 // forwardToNats 將 HTTP 請求序列化後，通過 NATS Request 轉發至對應微服務並等待回應。
 // 若路由設定了 return_fields，則只包含指定欄位；未設定或空陣列則包含全部欄位。
 func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string, clientIP string) *nyaapiserver.HTTPResponse {
@@ -698,6 +784,10 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	if bridgeResp.StatusCode == 0 {
 		bridgeResp.StatusCode = 200
+	}
+
+	if validationErr := h.validateResponse(bridgeResp, req.Path, clientIP); validationErr != nil {
+		return validationErr
 	}
 
 	resp := &nyaapiserver.HTTPResponse{

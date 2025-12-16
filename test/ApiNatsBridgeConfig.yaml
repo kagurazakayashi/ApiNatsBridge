@@ -90,6 +90,13 @@ bridge:
       max_value_length: 4096 # 參數值最大長度（位元組）
     body:
       max_length: 1048576 # 請求本文最大長度（位元組，此例為 1MB）
+  response_limits: # 回應欄位長度限制（可選，會被路由級別覆蓋）
+    body:
+      max_length: 1048576 # 回應本文最大長度（位元組，此例為 1MB）
+    headers:
+      max_count: 64 # 回應標頭最大筆數
+      max_key_length: 256 # 回應標頭名稱最大長度（位元組）
+      max_value_length: 4096 # 回應標頭值最大長度（位元組）
 
 # --- 路由轉發規則 ---
 routes:
@@ -134,6 +141,19 @@ routes:
         - message
       properties: #   JSON Schema：欄位定義
         message:
+          type: string
+    response_limits: # 回應資料長度限制（可選，每項皆可選）
+      body:
+        max_length: 65536
+    response_schema_body: # 回應 JSON Schema 校驗規則（可選）
+      root_type: object
+      strict: true
+      required:
+        - status
+      properties:
+        status:
+          type: string
+        result:
           type: string
   - path: "/test_form" # HTTP 請求路徑（表單提交測試）
     nats_subject: "test_req" # 轉發至 NATS 的 Subject

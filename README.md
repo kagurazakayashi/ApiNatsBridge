@@ -45,11 +45,11 @@
 {
   "method": "POST",
   "path": "/test",
-  "headers": {"Content-Type": "application/json", "...": "..."},
-  "cookies": {"session_id": "abc123"},
+  "headers": { "Content-Type": "application/json", "...": "..." },
+  "cookies": { "session_id": "abc123" },
   "remote_addr": "192.168.1.100:54321",
   "ip": "203.0.113.50",
-  "params": {"key": "value"},
+  "params": { "key": "value" },
   "body": "{\"message\":\"hello\"}"
 }
 ```
@@ -59,7 +59,7 @@
 ```json
 {
   "status_code": 200,
-  "headers": {"Content-Type": "application/json; charset=utf-8"},
+  "headers": { "Content-Type": "application/json; charset=utf-8" },
   "body": "{\"result\":\"success\"}"
 }
 ```
@@ -154,10 +154,10 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 
 ### 命令行参数
 
-| 参数 | 说明 |
-|------|------|
-| `-c <路径>` | 指定 YAML 配置文件路径。若未指定，默认读取与可执行文件同名的 `.yaml` 文件 |
-| `-v` | 详细模式。输出完整的请求/响应数据（标头、参数、Cookie、Schema 校验错误等） |
+| 参数        | 说明                                                                       |
+| ----------- | -------------------------------------------------------------------------- |
+| `-c <路径>` | 指定 YAML 配置文件路径。若未指定，默认读取与可执行文件同名的 `.yaml` 文件  |
+| `-v`        | 详细模式。输出完整的请求/响应数据（标头、参数、Cookie、Schema 校验错误等） |
 
 ### 启动示例
 
@@ -195,15 +195,15 @@ httpapiserver_config:
   httpapiserver_tls_key_file: ""
 
   # 超时设置（秒）
-  httpapiserver_read_timeout: 5      # 读取请求超时
-  httpapiserver_write_timeout: 30    # 写入响应超时
-  httpapiserver_idle_timeout: 60     # 空闲连接超时
+  httpapiserver_read_timeout: 5 # 读取请求超时
+  httpapiserver_write_timeout: 30 # 写入响应超时
+  httpapiserver_idle_timeout: 60 # 空闲连接超时
 
   # IP 速率限制
-  httpapiserver_enable_rate_limit: true   # 是否启用速率限制
-  httpapiserver_limit_requests: 50        # 每个时间窗口内允许的最大请求数
-  httpapiserver_limit_window: 1           # 时间窗口长度（秒）
-  httpapiserver_block_duration: 600       # 超出限制后封禁时长（秒）
+  httpapiserver_enable_rate_limit: true # 是否启用速率限制
+  httpapiserver_limit_requests: 50 # 每个时间窗口内允许的最大请求数
+  httpapiserver_limit_window: 1 # 时间窗口长度（秒）
+  httpapiserver_block_duration: 600 # 超出限制后封禁时长（秒）
 
 # --- NATS 客户端配置 ---
 nats_config:
@@ -219,9 +219,9 @@ nats_config:
   nats_client_name: ApiNatsBridge
 
   # 重连策略
-  nats_max_reconnects: 5     # 最大重连次数
-  nats_reconnect_wait: 2     # 重连等待间隔（秒）
-  nats_connect_timeout: 10   # 初次连接超时（秒）
+  nats_max_reconnects: 5 # 最大重连次数
+  nats_reconnect_wait: 2 # 重连等待间隔（秒）
+  nats_connect_timeout: 10 # 初次连接超时（秒）
 
   # AES 对称加密密钥（长度必须为 16、24 或 32 字节）
   # 留空则明文传输 NATS 消息
@@ -238,17 +238,17 @@ bridge:
   # CDN 真实 IP 标头列表（按优先级排列）
   # 用于从 CDN 代理请求中提取客户端真实 IP 地址
   cdnheader:
-    - "CF-Connecting-IP"        # Cloudflare
-    - "True-Client-IP"          # Akamai / Cloudflare Enterprise
-    - "Fastly-Client-IP"        # Fastly
-    - "CloudFront-Viewer-Address"  # AWS CloudFront
-    - "CDN-Viewer-IP"           # Google Cloud CDN
-    - "X-Azure-ClientIP"        # Azure CDN
-    - "Incap-Client-IP"         # Imperva / Incapsula
-    - "X-Sucuri-ClientIP"       # Sucuri
-    - "X-SP-Forwarding-IP"      # StackPath
-    - "Ali-Cdn-Real-Ip"         # 阿里云 CDN
-    - "Ar-Real-IP"              # ArvanCloud
+    - "CF-Connecting-IP" # Cloudflare
+    - "True-Client-IP" # Akamai / Cloudflare Enterprise
+    - "Fastly-Client-IP" # Fastly
+    - "CloudFront-Viewer-Address" # AWS CloudFront
+    - "CDN-Viewer-IP" # Google Cloud CDN
+    - "X-Azure-ClientIP" # Azure CDN
+    - "Incap-Client-IP" # Imperva / Incapsula
+    - "X-Sucuri-ClientIP" # Sucuri
+    - "X-SP-Forwarding-IP" # StackPath
+    - "Ali-Cdn-Real-Ip" # 阿里云 CDN
+    - "Ar-Real-IP" # ArvanCloud
 
   # 允许查看详细错误信息的 IP 白名单（用于开发调试）
   # 不在此列表中的 IP 仅收到通用错误提示
@@ -264,21 +264,21 @@ bridge:
   # 全局请求字段长度限制（0 或省略表示不限制）
   limits:
     path:
-      max_length: 2048          # 请求路径最大字节长度
+      max_length: 2048 # 请求路径最大字节长度
     headers:
-      max_count: 64             # 请求标头最大数量
-      max_key_length: 256       # 标头名称最大字节长度
-      max_value_length: 4096    # 标头值最大字节长度
+      max_count: 64 # 请求标头最大数量
+      max_key_length: 256 # 标头名称最大字节长度
+      max_value_length: 4096 # 标头值最大字节长度
     cookies:
-      max_count: 32             # Cookie 最大数量
-      max_key_length: 256       # Cookie 名称最大字节长度
-      max_value_length: 4096    # Cookie 值最大字节长度
+      max_count: 32 # Cookie 最大数量
+      max_key_length: 256 # Cookie 名称最大字节长度
+      max_value_length: 4096 # Cookie 值最大字节长度
     params:
-      max_count: 64             # 参数最大数量
-      max_key_length: 256       # 参数名称最大字节长度
-      max_value_length: 4096    # 参数值最大字节长度
+      max_count: 64 # 参数最大数量
+      max_key_length: 256 # 参数名称最大字节长度
+      max_value_length: 4096 # 参数值最大字节长度
     body:
-      max_length: 1048576       # 请求体最大字节长度（1MB）
+      max_length: 1048576 # 请求体最大字节长度（1MB）
 
 # --- 路由转发规则 ---
 routes:
@@ -315,78 +315,81 @@ routes:
 
 #### `httpapiserver_config` — HTTP 服务器配置
 
-| 配置项 | 类型 | 说明 |
-|--------|------|------|
-| `httpapiserver_host` | string | 服务器监听地址，`0.0.0.0` 监听所有网卡 |
-| `httpapiserver_port` | int | 监听端口 |
-| `httpapiserver_tls_cert_file` | string | TLS 证书文件路径，留空使用 HTTP |
-| `httpapiserver_tls_key_file` | string | TLS 私钥文件路径，留空使用 HTTP |
-| `httpapiserver_read_timeout` | int | 读取请求超时（秒） |
-| `httpapiserver_write_timeout` | int | 写入响应超时（秒） |
-| `httpapiserver_idle_timeout` | int | 空闲连接超时（秒） |
-| `httpapiserver_enable_rate_limit` | bool | 是否启用 IP 速率限制 |
-| `httpapiserver_limit_requests` | int | 时间窗口内最大请求数 |
-| `httpapiserver_limit_window` | int | 速率限制时间窗口（秒） |
-| `httpapiserver_block_duration` | int | 超限后封禁时长（秒） |
+| 配置项                            | 类型   | 说明                                   |
+| --------------------------------- | ------ | -------------------------------------- |
+| `httpapiserver_host`              | string | 服务器监听地址，`0.0.0.0` 监听所有网卡 |
+| `httpapiserver_port`              | int    | 监听端口                               |
+| `httpapiserver_tls_cert_file`     | string | TLS 证书文件路径，留空使用 HTTP        |
+| `httpapiserver_tls_key_file`      | string | TLS 私钥文件路径，留空使用 HTTP        |
+| `httpapiserver_read_timeout`      | int    | 读取请求超时（秒）                     |
+| `httpapiserver_write_timeout`     | int    | 写入响应超时（秒）                     |
+| `httpapiserver_idle_timeout`      | int    | 空闲连接超时（秒）                     |
+| `httpapiserver_enable_rate_limit` | bool   | 是否启用 IP 速率限制                   |
+| `httpapiserver_limit_requests`    | int    | 时间窗口内最大请求数                   |
+| `httpapiserver_limit_window`      | int    | 速率限制时间窗口（秒）                 |
+| `httpapiserver_block_duration`    | int    | 超限后封禁时长（秒）                   |
 
 #### `nats_config` — NATS 客户端配置
 
-| 配置项 | 类型 | 说明 |
-|--------|------|------|
-| `nats_server_host` | string | NATS 服务器地址 |
-| `nats_server_port` | int | NATS 服务器端口 |
-| `nats_user` | string | NATS 用户名，留空不认证 |
-| `nats_password` | string | NATS 密码 |
-| `nats_client_name` | string | 连接标识名称 |
-| `nats_max_reconnects` | int | 最大重连次数 |
-| `nats_reconnect_wait` | int | 重连间隔（秒） |
-| `nats_connect_timeout` | int | 连接超时（秒） |
-| `nats_encryption_key` | string | AES 全局加密密钥（16/24/32 字节），留空明文 |
-| `nats_theme_keys` | map | 按 Subject 独立设置的加密密钥 |
+| 配置项                 | 类型   | 说明                                        |
+| ---------------------- | ------ | ------------------------------------------- |
+| `nats_server_host`     | string | NATS 服务器地址                             |
+| `nats_server_port`     | int    | NATS 服务器端口                             |
+| `nats_user`            | string | NATS 用户名，留空不认证                     |
+| `nats_password`        | string | NATS 密码                                   |
+| `nats_client_name`     | string | 连接标识名称                                |
+| `nats_max_reconnects`  | int    | 最大重连次数                                |
+| `nats_reconnect_wait`  | int    | 重连间隔（秒）                              |
+| `nats_connect_timeout` | int    | 连接超时（秒）                              |
+| `nats_encryption_key`  | string | AES 全局加密密钥（16/24/32 字节），留空明文 |
+| `nats_theme_keys`      | map    | 按 Subject 独立设置的加密密钥               |
 
 #### `bridge` — 桥接层配置
 
-| 配置项 | 类型 | 说明 |
-|--------|------|------|
-| `cdnheader` | []string | CDN 真实 IP 标头优先级列表 |
+| 配置项             | 类型     | 说明                         |
+| ------------------ | -------- | ---------------------------- |
+| `cdnheader`        | []string | CDN 真实 IP 标头优先级列表   |
 | `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单 |
-| `cookie_uuid_key` | string | UUID Cookie 键名，留空不启用 |
-| `limits` | object | 全局请求字段长度限制 |
+| `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用 |
+| `limits`           | object   | 全局请求字段长度限制         |
+| `response_limits`  | object   | 全局回应字段长度限制（结构同 limits） |
 
 #### `routes` — 路由规则
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `path` | string | （必填） | HTTP 请求路径 |
-| `nats_subject` | string | （必填） | 转发的 NATS Subject |
-| `methods` | []string | []（允许全部） | 允许的 HTTP 方法列表 |
-| `content_type` | string | ""（不校验） | 要求的 Content-Type 前缀 |
-| `timeout` | int | 30 | NATS 响应超时（秒） |
-| `return_fields` | []string | []（返回全部） | 转发给微服务的字段选择 |
-| `limits` | object | - | 路由级别长度限制（覆盖全局） |
-| `schema_body` | object | - | 请求体 JSON Schema 校验 |
+| 配置项          | 类型     | 默认值         | 说明                         |
+| --------------- | -------- | -------------- | ---------------------------- |
+| `path`          | string   | （必填）       | HTTP 请求路径                |
+| `nats_subject`  | string   | （必填）       | 转发的 NATS Subject          |
+| `methods`       | []string | []（允许全部） | 允许的 HTTP 方法列表         |
+| `content_type`  | string   | ""（不校验）   | 要求的 Content-Type 前缀     |
+| `timeout`       | int      | 30             | NATS 响应超时（秒）          |
+| `return_fields` | []string | []（返回全部） | 转发给微服务的字段选择       |
+| `limits`              | object   | -              | 路由级别长度限制（覆盖全局）                 |
+| `schema_body`         | object   | -              | 请求体 JSON Schema 校验                      |
+| `response_limits`     | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
+| `response_schema_body`| object   | -              | 回应体 JSON Schema 校验（结构同 schema_body） |
 
 #### `return_fields` 可选值
 
-| 字段名 | 说明 |
-|--------|------|
-| `method` | HTTP 请求方法 |
-| `path` | 请求路径 |
-| `headers` | 请求标头（键值对） |
-| `cookies` | Cookie（键值对） |
-| `remote_addr` | 直连 TCP 地址（含端口） |
-| `ip` | 解析后的真实客户端 IP |
-| `params` | URL 查询参数和表单参数（键值对） |
-| `body` | 请求体原始内容 |
+| 字段名        | 说明                             |
+| ------------- | -------------------------------- |
+| `method`      | HTTP 请求方法                    |
+| `path`        | 请求路径                         |
+| `headers`     | 请求标头（键值对）               |
+| `cookies`     | Cookie（键值对）                 |
+| `remote_addr` | 直连 TCP 地址（含端口）          |
+| `ip`          | 解析后的真实客户端 IP            |
+| `params`      | URL 查询参数和表单参数（键值对） |
+| `body`        | 请求体原始内容                   |
 
 #### `schema_body` JSON Schema 校验
 
 除标准 JSON Schema 字段外，支持两个控制键：
 
-| 控制键 | 类型 | 说明 |
-|--------|------|------|
-| `root_type` | string | 根节点预期类型（如 `object`、`array`） |
-| `strict` | bool | 严格模式，为 `true` 时拒绝 Schema 中未定义的字段 |
+| 控制键      | 类型   | 说明                                             |
+| ----------- | ------ | ------------------------------------------------ |
+| `root_type` | string | 根节点预期类型（如 `object`、`array`）           |
+| `strict`    | bool   | 严格模式，为 `true` 时拒绝 Schema 中未定义的字段 |
 
 其余字段遵循 [JSON Schema](https://json-schema.org/) 规范（如 `required`、`properties`、`type` 等）。
 
@@ -420,6 +423,7 @@ routes:
 ```
 
 客户端请求：
+
 ```bash
 curl -X POST http://127.0.0.1:9080/api/login \
   -H "Content-Type: application/json" \
@@ -454,6 +458,7 @@ routes:
 ```
 
 客户端请求：
+
 ```bash
 curl -X POST http://127.0.0.1:9080/api/feedback \
   -d "message=Great+service&rating=5"
@@ -495,7 +500,7 @@ nats_config:
   nats_encryption_key: "DEFAULT_GLOBAL_KEY_32_CHARS_OK!!"
   nats_theme_keys:
     "payment.process": "PAYMENT_DEDICATED_KEY_32_CHARS!!"
-    "public.notify": ""   # 此 Subject 明文传输
+    "public.notify": "" # 此 Subject 明文传输
 
 routes:
   - path: "/api/pay"
@@ -542,6 +547,7 @@ type BridgeResponse struct {
 ```
 
 微服务处理逻辑：
+
 1. 订阅 NATS Subject（如 `user_service`）
 2. 收到消息后解析为 `BridgeRequest`
 3. 执行业务逻辑
@@ -559,6 +565,7 @@ test.bat
 ```
 
 测试流程：
+
 1. 启动本地 NATS 服务器（`test/nats-server/`）
 2. 启动 Mock 微服务（`test/mock-microservice/`）
 3. 启动 ApiNatsBridge 主程序
@@ -566,15 +573,25 @@ test.bat
 
 ## 依赖项
 
-| 包 | 用途 |
-|----|------|
-| [github.com/google/uuid](https://github.com/google/uuid) | UUID 生成 |
+| 包                                                                                                        | 用途                |
+| --------------------------------------------------------------------------------------------------------- | ------------------- |
+| [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID 生成           |
 | [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API 服务器框架 |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go) | NATS 客户端封装（含加密） |
-| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml) | YAML 配置解析 |
-| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema) | JSON Schema 校验 |
-| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go) | NATS Go 客户端 |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go)      | NATS 客户端封装     |
+| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml)                                                       | YAML 配置解析       |
+| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema)                 | JSON Schema 校验    |
+| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go)                                          | NATS Go 客户端      |
 
 ## 许可证
 
-请参阅项目中的 LICENSE 文件。
+```LICENSE
+Copyright (c) 2026 KagurazakaYashi
+ApiNatsBridge is licensed under Mulan PSL v2.
+You can use this software according to the terms and conditions of the Mulan PSL v2.
+You may obtain a copy of Mulan PSL v2 at:
+         http://license.coscl.org.cn/MulanPSL2
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+See the Mulan PSL v2 for more details.
+```
