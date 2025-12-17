@@ -4,7 +4,7 @@ CD /D "%~dp0"
 
 ECHO.
 ECHO ============================================
-ECHO   ApiNatsBridge Integration Test
+ECHO   ApiNatsBridge Service Launcher
 ECHO ============================================
 ECHO.
 ECHO   This script will start:
@@ -12,7 +12,7 @@ ECHO     (1) NATS Server
 ECHO     (2) Mock Microservice
 ECHO     (3) ApiNatsBridge Main
 ECHO.
-ECHO   Close each window manually after testing.
+ECHO   Close each window manually after use.
 ECHO ============================================
 ECHO.
 
@@ -28,22 +28,7 @@ ECHO *** Starting ApiNatsBridge ***
 START "ApiNatsBridge" go run . -c test\ApiNatsBridgeConfig.yaml
 TIMEOUT /T 5 /NOBREAK >NUL
 
-exit
-
-ECHO.
-ECHO *** Running HTTP Tests ***
-ECHO.
-ECHO --- test\ping.bat ---
-CALL test\ping.bat
-ECHO.
-ECHO --- test\test.bat ---
-CALL test\test.bat
-ECHO.
-ECHO --- test\test_form.bat ---
-CALL test\test_form.bat
-ECHO.
-
 ECHO ============================================
-ECHO   Test script finished.
+ECHO   All services started.
 ECHO ============================================
 ECHO.

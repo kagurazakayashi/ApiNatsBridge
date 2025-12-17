@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,9 +130,9 @@ func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig,
 	flag.BoolVar(&verbose, "v", false, "verbose: log full request data")
 	flag.Parse()
 	configPath, appConfig, appConfigErr := loadConfigFile(configPath)
-	fmt.Printf("[main] Config File: %s\n", configPath)
+	logMain("Config File: %s", configPath)
 	if appConfigErr != nil {
-		fmt.Printf("[main][ERROR] %v\n", appConfigErr)
+		logError("MAIN", "%v", appConfigErr)
 		return false, nil, nil, BridgeConfig{}, nil
 	}
 	var httpAPIServerConfig *nyaapiserver.HttpAPIServerConfig = &appConfig.HttpAPIServerConfig

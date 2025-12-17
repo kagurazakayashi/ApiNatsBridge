@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,17 +24,23 @@ func main() {
 		return
 	}
 
-	fmt.Printf("[main] 載入路由數量: %d\n", len(routes))
-	for _, r := range routes {
-		fmt.Printf("[main] 路由: %s -> %s\n", r.Path, r.NatsSubject)
+	logMain("載入路由數量: %d", len(routes))
+	routeStrs := make([]string, len(routes))
+	for i, r := range routes {
+		routeStrs[i] = fmt.Sprintf("%s -> %s", r.Path, r.NatsSubject)
 	}
-	for _, cdn := range bridgeConfig.CdnHeader {
-		fmt.Printf("[main] CDN 標頭: %s\n", cdn)
+	logMain("路由: %s", strings.Join(routeStrs, ", "))
+	cdnStrs := make([]string, len(bridgeConfig.CdnHeader))
+	for i, cdn := range bridgeConfig.CdnHeader {
+		cdnStrs[i] = cdn
+	}
+	if len(cdnStrs) > 0 {
+		logMain("CDN 標頭: %s", strings.Join(cdnStrs, ", "))
 	}
 
 	var natsClient *nyanats.NyaNATS = nyanats.NewC(*natsConfig, natsLogger())
 	if err := natsClient.Error(); err != nil {
-		fmt.Printf("[ERROR][NSTA] %v\n", err)
+		logError("NATS", "%v", err)
 		return
 	}
 
@@ -42,7 +49,7 @@ func main() {
 
 	go func() {
 		if err := httpAPIServer.Start("ApiNatsBridge", "1.0"); err != nil {
-			fmt.Printf("[ERROR][HTTP] %v\n", err)
+			logError("HTTP", "%v", err)
 			return
 		}
 	}()
@@ -59,12 +66,12 @@ func main() {
 
 	// 執行伺服器停止流程，若停止失敗則輸出錯誤資訊。
 	if err := httpAPIServer.Stop(ctx); err != nil {
-		fmt.Printf("[MAIN] [ERROR] Stop Server: %v\n", err)
+		logError("MAIN", "Stop Server: %v", err)
 	}
 
 	// 停止 NATS 連線
 	if err := natsClient.UnsubscribeAll(); err != nil {
-		fmt.Printf("[MAIN] [ERROR] UnsubscribeAll: %v\n", err)
+		logError("MAIN", "UnsubscribeAll: %v", err)
 	}
 	natsClient.Close()
 }

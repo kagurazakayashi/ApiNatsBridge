@@ -4,7 +4,7 @@ CD /D "%~dp0"
 
 ECHO.
 ECHO ============================================
-ECHO   ApiNatsBridge Integration Test - Stop
+ECHO   ApiNatsBridge Service Stopper
 ECHO ============================================
 ECHO.
 
@@ -24,5 +24,3 @@ ECHO ============================================
 ECHO   All processes stopped.
 ECHO ============================================
 ECHO.
-
-exit

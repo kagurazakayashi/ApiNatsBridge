@@ -555,21 +555,27 @@ type BridgeResponse struct {
 
 如果微服务返回的不是合法的 `BridgeResponse` JSON，ApiNatsBridge 会将原始响应字符串作为 HTTP 200 响应体直接返回给客户端。
 
-## 集成测试
+## 本地服务环境
 
-项目包含完整的本地集成测试环境（位于 `test/` 目录）：
+项目包含完整的本地测试环境（位于 `test/` 目录）：
 
 ```bash
-# Windows 下一键启动测试（启动 NATS Server、Mock 微服务、ApiNatsBridge 并执行测试）
-test.bat
+# Windows 下一键启动（启动 NATS Server、Mock 微服务、ApiNatsBridge）
+serve.bat
 ```
 
-测试流程：
+```bash
+# 一键停止所有服务
+serve_stop.bat
+```
+
+启动流程：
 
 1. 启动本地 NATS 服务器（`test/nats-server/`）
 2. 启动 Mock 微服务（`test/mock-microservice/`）
 3. 启动 ApiNatsBridge 主程序
-4. 执行 HTTP 测试脚本（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）
+
+启动后可执行 HTTP 测试脚本（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）。
 
 ## 依赖项
 

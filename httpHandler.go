@@ -182,7 +182,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	compiler := jsonschema.NewCompiler()
 
 	for _, r := range routes {
-		fmt.Printf("[BRIDGE] 載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q, return_fields=%v)\n", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType, r.ReturnFields)
+		logBridge("載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q, return_fields=%v)", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType, r.ReturnFields)
 		routeMap[r.Path] = r.NatsSubject
 		timeoutMap[r.Path] = r.TimeoutDuration()
 		allowed := make(map[string]struct{})
@@ -195,7 +195,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		}
 		if r.Limits != nil {
 			routeLimitsMap[r.Path] = r.Limits
-			fmt.Printf("[BRIDGE] 路由 %s 已載入自訂長度限制\n", r.Path)
+			logBridge("路由 %s 已載入自訂長度限制", r.Path)
 		}
 		if len(r.ReturnFields) > 0 {
 			fieldSet := make(map[string]struct{}, len(r.ReturnFields))
@@ -209,41 +209,41 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			routeSchemaMaps[r.Path] = schemaMap
 			url := "config://routes" + r.Path
 		if err := compiler.AddResource(url, schemaMap); err != nil {
-			fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 資源添加失敗: %v\n", r.Path, err)
+			logBridge("路由 %s 的 schema_body 資源添加失敗: %v", r.Path, err)
 			continue
 		}
 		schema, err := compiler.Compile(url)
 		if err != nil {
-			fmt.Printf("[BRIDGE] 路由 %s 的 schema_body 無效: %v\n", r.Path, err)
+			logBridge("路由 %s 的 schema_body 無效: %v", r.Path, err)
 			continue
 		}
 		routeSchemas[r.Path] = schema
-		fmt.Printf("[BRIDGE] 路由 %s 已載入 JSON Schema 校驗\n", r.Path)
+		logBridge("路由 %s 已載入 JSON Schema 校驗", r.Path)
 	}
 	if r.ResponseLimits != nil {
 		routeResponseLimitsMap[r.Path] = r.ResponseLimits
-		fmt.Printf("[BRIDGE] 路由 %s 已載入回應自訂長度限制\n", r.Path)
+		logBridge("路由 %s 已載入回應自訂長度限制", r.Path)
 	}
 	responseSchemaMap := buildSchemaFromMap(r.ResponseSchemaBody)
 	if responseSchemaMap != nil {
 		routeResponseSchemaMaps[r.Path] = responseSchemaMap
 		url := "config://routes" + r.Path + "/response"
 		if err := compiler.AddResource(url, responseSchemaMap); err != nil {
-			fmt.Printf("[BRIDGE] 路由 %s 的 response_schema_body 資源添加失敗: %v\n", r.Path, err)
+			logBridge("路由 %s 的 response_schema_body 資源添加失敗: %v", r.Path, err)
 			continue
 		}
 			schema, err := compiler.Compile(url)
 			if err != nil {
-				fmt.Printf("[BRIDGE] 路由 %s 的 response_schema_body 無效: %v\n", r.Path, err)
+			logBridge("路由 %s 的 response_schema_body 無效: %v", r.Path, err)
 				continue
 			}
 			routeResponseSchemas[r.Path] = schema
-			fmt.Printf("[BRIDGE] 路由 %s 已載入回應 JSON Schema 校驗\n", r.Path)
+			logBridge("路由 %s 已載入回應 JSON Schema 校驗", r.Path)
 		}
 	}
-	fmt.Printf("[BRIDGE] 共載入 %d 條路由, %d 個 CDN 標頭\n", len(routeMap), len(cdnHeaders))
+	logBridge("共載入 %d 條路由, %d 個 CDN 標頭", len(routeMap), len(cdnHeaders))
 	if cookieUUIDKey != "" {
-		fmt.Printf("[BRIDGE] 已啟用自動 UUID Cookie，鍵名: %s\n", cookieUUIDKey)
+		logBridge("已啟用自動 UUID Cookie，鍵名: %s", cookieUUIDKey)
 	}
 	return &BridgeHandler{
 		natsClient:               natsClient,
@@ -278,9 +278,9 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 			newUUID = strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
 			req.Cookies[h.cookieUUIDKey] = newUUID
 			if verbose {
-				fmt.Printf("[BRIDGE] 為用戶端產生新 UUID Cookie: %s=%s\n", h.cookieUUIDKey, newUUID)
+				logBridge("為用戶端產生新 UUID Cookie: %s=%s", h.cookieUUIDKey, newUUID)
 			} else {
-				fmt.Printf("[BRIDGE] 為用戶端產生新 UUID Cookie: %s\n", h.cookieUUIDKey)
+				logBridge("為用戶端產生新 UUID Cookie: %s", h.cookieUUIDKey)
 			}
 		}
 	}
@@ -296,27 +296,27 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 
 // handleRequest 為 HTTP 請求的實際處理邏輯。
 func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
-	fmt.Printf("\n[BRIDGE] HTTP 請求：%s %s | 來源：%s\n", req.Method, req.Path, req.RemoteAddr)
+	logBridge("HTTP 請求：%s %s | 來源：%s", req.Method, req.Path, req.RemoteAddr)
 
 	if len(req.Params) > 0 {
 		if verbose {
-			fmt.Printf("[BRIDGE] HTTP 參數：%v\n", req.Params)
+			logBridge("HTTP 參數：%v", req.Params)
 		} else {
-			fmt.Printf("[BRIDGE] HTTP 參數：%d 項\n", len(req.Params))
+			logBridge("HTTP 參數：%d 項", len(req.Params))
 		}
 	}
 
 	if len(req.Cookies) > 0 {
 		if verbose {
-			fmt.Printf("[BRIDGE] HTTP Cookie：%v\n", req.Cookies)
+			logBridge("HTTP Cookie：%v", req.Cookies)
 		} else {
-			fmt.Printf("[BRIDGE] HTTP Cookie：%d 項\n", len(req.Cookies))
+			logBridge("HTTP Cookie：%d 項", len(req.Cookies))
 		}
 	}
 
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
 	if clientIP == "" {
-		fmt.Printf("[BRIDGE] 無法解析用戶端 IP\n")
+		logBridge("無法解析用戶端 IP")
 		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte("Bad Request: unable to resolve client IP")}
 	}
 
@@ -372,12 +372,12 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			if schemaMap, ok := h.routeSchemaMaps[req.Path]; ok {
 				coerceFormValues(formMap, schemaMap)
 			}
-		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
+			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 			if err := schema.Validate(formMap); err != nil {
 					if verbose {
-						fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+						logBridge("Schema 校驗失敗 for %s: %v", req.Path, err)
 					} else {
-						fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s\n", req.Path)
+						logBridge("Schema 校驗失敗 for %s", req.Path)
 					}
 					return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 				}
@@ -398,9 +398,9 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			}
 			if err := schema.Validate(bodyJSON); err != nil {
 				if verbose {
-					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s: %v\n", req.Path, err)
+					logBridge("Schema 校驗失敗 for %s: %v", req.Path, err)
 				} else {
-					fmt.Printf("[BRIDGE] Schema 校驗失敗 for %s\n", req.Path)
+					logBridge("Schema 校驗失敗 for %s", req.Path)
 				}
 				return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
 			}
@@ -591,9 +591,9 @@ func (h *BridgeHandler) isErrorDetailIP(ip string) bool {
 func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clientIP string) *nyaapiserver.HTTPResponse {
 	if detail != "" {
 		if verbose {
-			fmt.Printf("[BRIDGE] %s: %s\n", msg, detail)
+			logBridge("%s: %s", msg, detail)
 		} else {
-			fmt.Printf("[BRIDGE] %s\n", msg)
+			logBridge("%s", msg)
 		}
 	}
 	if h.isErrorDetailIP(clientIP) && detail != "" {
@@ -640,9 +640,9 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 		}
 		if err := schema.Validate(bodyJSON); err != nil {
 			if verbose {
-				fmt.Printf("[BRIDGE] 回應 Schema 校驗失敗 for %s: %v\n", path, err)
+				logBridge("回應 Schema 校驗失敗 for %s: %v", path, err)
 			} else {
-				fmt.Printf("[BRIDGE] 回應 Schema 校驗失敗 for %s\n", path)
+				logBridge("回應 Schema 校驗失敗 for %s", path)
 			}
 			return h.errResp(502, "Response schema validation failed", err.Error(), clientIP)
 		}
@@ -763,7 +763,7 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	}
 
 	timeout := h.routeTimeouts[req.Path]
-	fmt.Printf("[BRIDGE] 轉發請求到 NATS: subject=%s, timeout=%v\n", natsSubject, timeout)
+	logBridge("轉發請求到 NATS: subject=%s, timeout=%v", natsSubject, timeout)
 	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
 		return h.errResp(502, "Bad Gateway: NATS request failed", err.Error(), clientIP)
@@ -772,9 +772,9 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	var bridgeResp BridgeResponse
 	if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
 		if verbose {
-			fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v, 原始回應: %s\n", err, respStr)
+			logBridge("BridgeResponse 解析失敗: %v, 原始回應: %s", err, respStr)
 		} else {
-			fmt.Printf("[BRIDGE] BridgeResponse 解析失敗: %v\n", err)
+			logBridge("BridgeResponse 解析失敗: %v", err)
 		}
 		return &nyaapiserver.HTTPResponse{
 			StatusCode: 200,

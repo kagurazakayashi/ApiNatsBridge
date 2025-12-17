@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -40,12 +39,12 @@ func apiping(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 			})
 
 			// 輸出回應標頭，便於除錯確認 JSON 回應是否正確附帶必要標頭。
-			fmt.Println("[apiping] 回應標頭：", response.Headers)
+			logPing("回應標頭：%v", response.Headers)
 			return response
 		}
 
 		// 當時間戳格式不正確時輸出除錯資訊，協助定位客戶端傳值問題。
-		fmt.Println("[apiping] X-Timestamp-Ms 解析失敗：", clientTimestamp)
+		logPing("X-Timestamp-Ms 解析失敗：%s", clientTimestamp)
 	}
 
 	// 若未提供有效的時間戳標頭，則回傳基本文字 pong。
@@ -56,6 +55,6 @@ func apiping(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 	}
 
 	// 輸出退回純文字回應的原因，便於除錯判斷請求是否缺少必要標頭。
-	fmt.Println("[apiping] 使用純文字 pong 回應，原因：未提供或無法解析 X-Timestamp-Ms")
+	logPing("使用純文字 pong 回應，原因：未提供或無法解析 X-Timestamp-Ms")
 	return response
 }
