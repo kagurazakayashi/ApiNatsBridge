@@ -9,11 +9,56 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
+	"github.com/kagurazakayashi/libNyaruko_Go/nyalog"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"gopkg.in/yaml.v3"
 )
+
+const mockLogLevel = nyalog.Debug
+
+var (
+	logFile  *os.File
+	noOutput bool
+	logMu    sync.Mutex
+)
+
+func writeLog(level nyalog.LogLevel, color nyalog.ConsoleColor, msg string) {
+	if !noOutput {
+		nyalog.LogCC(mockLogLevel, level, color, "[mock_service]", msg)
+	}
+	if logFile != nil {
+		logMu.Lock()
+		fmt.Fprintf(logFile, "[%s] [%s] [mock_service] %s\n", level.String(), time.Now().Format("2006-01-02 15:04:05"), msg)
+		logMu.Unlock()
+	}
+}
+
+type mockNatsWriter struct{}
+
+func (w *mockNatsWriter) Write(p []byte) (n int, err error) {
+	line := strings.TrimRight(string(p), "\n\r")
+	if line == "" {
+		return len(p), nil
+	}
+	writeLog(nyalog.Info, nyalog.Green, line)
+	return len(p), nil
+}
+
+func logMock(format string, a ...interface{}) {
+	writeLog(nyalog.Info, nyalog.Green, fmt.Sprintf(format, a...))
+}
+
+func logMockRequest(format string, a ...interface{}) {
+	writeLog(nyalog.Info, nyalog.Yellow, fmt.Sprintf(format, a...))
+}
+
+func logMockError(format string, a ...interface{}) {
+	writeLog(nyalog.Error, nyalog.Red, fmt.Sprintf(format, a...))
+}
 
 // routeConfig 定義單一路由與 NATS Subject 的對應關係。
 type routeConfig struct {
@@ -84,36 +129,43 @@ func loadConfig(configPath string) (*mockServiceConfig, string, error) {
 	return &cfg, configPath, nil
 }
 
-// natsLogger 建立供 NATS 用戶端使用的標準日誌輸出器。
+// natsLogger 建立供 NATS 用戶端使用的日誌輸出器。
 func natsLogger() *log.Logger {
-	return log.New(os.Stdout, "[mock_service] ", log.LstdFlags)
+	return log.New(&mockNatsWriter{}, "", 0)
 }
 
 // main 啟動 mock service，完成設定載入、NATS 連線、路由訂閱與優雅關閉流程。
 func main() {
-	log.SetOutput(os.Stdout)
-	log.SetPrefix("[mock_service] ")
-	log.SetFlags(0)
-
 	var configPath string
+	var logPath string
 	flag.StringVar(&configPath, "c", "", "yaml config file")
+	flag.StringVar(&logPath, "log", "", "log file path")
+	flag.BoolVar(&noOutput, "noout", false, "suppress console output")
 	flag.Parse()
+
+	if logPath != "" {
+		f, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "無法開啟日誌檔案: %v\n", err)
+			os.Exit(1)
+		}
+		logFile = f
+		defer logFile.Close()
+	}
 
 	cfg, resolvedPath, err := loadConfig(configPath)
 	if err != nil {
-		log.Printf("載入設定檔失敗: %v (path: %s)", err, resolvedPath)
+		logMockError("載入設定檔失敗: %v (path: %s)", err, resolvedPath)
 		return
 	}
 
-	log.Println()
-	log.Printf("設定檔: %s", resolvedPath)
-	log.Printf("NATS 伺服器: %s:%d", cfg.NatsConfig.NatsServerHost, cfg.NatsConfig.NatsServerPort)
-	log.Printf("共載入 %d 條路由", len(cfg.Routes))
-	log.Println()
+	logMock("設定檔: %s", resolvedPath)
+	logMock("NATS 伺服器: %s:%d", cfg.NatsConfig.NatsServerHost, cfg.NatsConfig.NatsServerPort)
+	logMock("共載入 %d 條路由", len(cfg.Routes))
 
 	natsClient := nyanats.NewC(cfg.NatsConfig, natsLogger())
 	if err := natsClient.Error(); err != nil {
-		log.Printf("NATS 連線失敗: %v", err)
+		logMockError("NATS 連線失敗: %v", err)
 		return
 	}
 
@@ -122,35 +174,43 @@ func main() {
 		httpPath := route.Path
 
 		err := natsClient.Subscribe(subject, func(m string) string {
-			log.Println()
-			log.Println("===== 收到請求 =====")
-			log.Printf("NATS Subject : %s", subject)
-			log.Printf("HTTP Path    : %s", httpPath)
-			log.Printf("原始訊息      : %s", m)
+			logMockRequest("===== 收到請求 =====")
+			logMockRequest("NATS Subject : %s", subject)
+			logMockRequest("HTTP Path    : %s", httpPath)
+			logMockRequest("原始訊息      : %s", m)
 
 			var req bridgeRequest
 			if err := json.Unmarshal([]byte(m), &req); err != nil {
-				log.Printf("解析失敗      : %v", err)
+				logMockError("解析失敗      : %v", err)
 				return `{"status_code":400,"body":"Invalid request JSON"}`
 			}
 
-			log.Printf("HTTP Method  : %s", req.Method)
-			log.Printf("HTTP Path    : %s", req.Path)
-			log.Printf("Remote Addr  : %s", req.RemoteAddr)
-			log.Printf("IP           : %s", req.IP)
-			log.Println("Headers      :")
+			logMockRequest("HTTP Method  : %s", req.Method)
+			logMockRequest("HTTP Path    : %s", req.Path)
+			logMockRequest("Remote Addr  : %s", req.RemoteAddr)
+			logMockRequest("IP           : %s", req.IP)
+			headerLines := make([]string, 0, len(req.Headers))
 			for k, v := range req.Headers {
-				log.Printf("  %s: %s", k, v)
+				headerLines = append(headerLines, fmt.Sprintf("%s: %s", k, v))
 			}
-			log.Println("Cookies      :")
+			if len(headerLines) > 0 {
+				logMockRequest("Headers      : %s", strings.Join(headerLines, ", "))
+			}
+			cookieLines := make([]string, 0, len(req.Cookies))
 			for k, v := range req.Cookies {
-				log.Printf("  %s: %s", k, v)
+				cookieLines = append(cookieLines, fmt.Sprintf("%s: %s", k, v))
 			}
-			log.Println("Params       :")
+			if len(cookieLines) > 0 {
+				logMockRequest("Cookies      : %s", strings.Join(cookieLines, ", "))
+			}
+			paramLines := make([]string, 0, len(req.Params))
 			for k, v := range req.Params {
-				log.Printf("  %s = %s", k, v)
+				paramLines = append(paramLines, fmt.Sprintf("%s = %s", k, v))
 			}
-			log.Printf("Body         : %s", req.Body)
+			if len(paramLines) > 0 {
+				logMockRequest("Params       : %s", strings.Join(paramLines, ", "))
+			}
+			logMockRequest("Body         : %s", req.Body)
 
 			resp := bridgeResponse{
 				StatusCode: 200,
@@ -165,35 +225,31 @@ func main() {
 			respJSON, _ := json.Marshal(resp)
 			respBody := string(respJSON)
 
-			log.Println("----- 發送回覆 -----")
-			log.Printf("回應 JSON    : %s", respBody)
-			log.Printf("狀態碼       : %d", resp.StatusCode)
-			log.Println("=====")
-			log.Println()
+			logMockRequest("----- 發送回覆 -----")
+			logMockRequest("回應 JSON    : %s", respBody)
+			logMockRequest("狀態碼       : %d", resp.StatusCode)
+			logMockRequest("=====")
 
 			return respBody
 		})
 
 		if err != nil {
-			log.Printf("訂閱失敗 %s: %v", subject, err)
+			logMockError("訂閱失敗 %s: %v", subject, err)
 			return
 		}
-		log.Printf("已訂閱: %s  ->  %s", httpPath, subject)
+		logMock("已訂閱: %s  ->  %s", httpPath, subject)
 	}
 
-	log.Println()
-	log.Println("所有訂閱已完成，等待請求... (Ctrl+C 退出)")
-	log.Println()
+	logMock("所有訂閱已完成，等待請求... (Ctrl+C 退出)")
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println()
-	log.Println("正在關閉...")
+	logMock("正在關閉...")
 	if err := natsClient.UnsubscribeAll(); err != nil {
-		log.Printf("UnsubscribeAll 錯誤: %v", err)
+		logMockError("UnsubscribeAll 錯誤: %v", err)
 	}
 	natsClient.Close()
-	log.Println("已關閉")
+	logMock("已關閉")
 }

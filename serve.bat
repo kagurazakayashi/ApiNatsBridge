@@ -21,7 +21,7 @@ START "NATS_Server" /D "test\nats-server\" nats-server.exe -c nats-server.conf
 TIMEOUT /T 3 /NOBREAK >NUL
 
 ECHO *** Starting Mock Microservice ***
-START "Mock_Service" go run ./test/mock-microservice/ -c test\ApiNatsBridgeConfig.yaml
+START "Mock_Service" go run ./test/mock-microservice/ -c test\ApiNatsBridgeConfig.yaml --log logs\mock_service.log
 TIMEOUT /T 5 /NOBREAK >NUL
 
 ECHO *** Starting ApiNatsBridge ***

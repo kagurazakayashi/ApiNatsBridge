@@ -13,7 +13,7 @@ func logMain(format string, a ...interface{}) {
 }
 
 func logError(module string, format string, a ...interface{}) {
-	nyalog.LogCC(logLevel, nyalog.Error, nyalog.Red, fmt.Sprintf("[ERROR][%s]", module), fmt.Sprintf(format, a...))
+	nyalog.LogCC(logLevel, nyalog.Error, nyalog.Red, fmt.Sprintf("[%s][ERROR]", module), fmt.Sprintf(format, a...))
 }
 
 func logBridge(format string, a ...interface{}) {
@@ -28,6 +28,6 @@ func logHTTPStat(format string, a ...interface{}) {
 	nyalog.LogCC(logLevel, nyalog.OK, nyalog.Purple, "[HTTPSTAT]", fmt.Sprintf(format, a...))
 }
 
-func logPing(format string, a ...interface{}) {
-	nyalog.LogCC(logLevel, nyalog.Info, nyalog.Cyan, "[apiping]", fmt.Sprintf(format, a...))
+func logModule(format string, a ...interface{}) {
+	nyalog.LogCC(logLevel, nyalog.Info, nyalog.Cyan, "[MODULE]", fmt.Sprintf(format, a...))
 }

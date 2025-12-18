@@ -37,6 +37,24 @@
 4. 后端微服务处理请求后返回 `BridgeResponse` JSON
 5. ApiNatsBridge 将响应内容作为 HTTP 响应返回给客户端
 
+## 日志模块前缀
+
+运行时日志输出使用以下前缀区分来源模块：
+
+| 前缀 | 来源文件 | 颜色 | 用途 |
+|------|----------|------|------|
+| `[MAIN]` | `logger.go` | Cyan | 主流程生命周期日志 |
+| `[NATS]` | `natsLogger.go` | Green | NATS 客户端连接与事件 |
+| `[BRIDGE]` | `logger.go` | Yellow | 桥接路由与转发日志 |
+| `[HTTP]` | `logger.go` | Blue | HTTP 请求日志行 |
+| `[HTTPSTAT]` | `logger.go` | Purple | HTTP 服务器运行时统计 |
+| `[MODULE]` | `logger.go` | Cyan | 通用模块日志（如 `/ping`） |
+| `[NATS][ERROR]` | `logger.go` | Red | NATS 连接错误 |
+| `[HTTP][ERROR]` | `logger.go` | Red | HTTP 服务器错误 |
+| `[MAIN][ERROR]` | `logger.go` | Red | 主流程致命错误 |
+
+所有前缀均通过本地库 `libNyaruko_Go/nyalog` 的 `LogCC()` 函数输出。
+
 ## 数据结构
 
 ### BridgeRequest（发送给微服务）
@@ -576,6 +594,29 @@ serve_stop.bat
 3. 启动 ApiNatsBridge 主程序
 
 启动后可执行 HTTP 测试脚本（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）。
+
+### Mock 微服务命令行参数
+
+Mock 微服务（`test/mock-microservice/`）支持以下启动参数：
+
+| 参数           | 说明                                                    |
+| -------------- | ------------------------------------------------------- |
+| `-c <路径>`    | 指定 YAML 配置文件路径（同 ApiNatsBridge）               |
+| `--log <路径>` | 将日志写入指定文件（同时控制台正常输出）                 |
+| `--noout`      | 禁止控制台日志输出（通常与 `--log` 搭配使用）            |
+
+启动示例：
+
+```bash
+# 正常启动
+go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml
+
+# 写日志到文件
+go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log
+
+# 仅写日志到文件，不输出控制台
+go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log --noout
+```
 
 ## 依赖项
 
