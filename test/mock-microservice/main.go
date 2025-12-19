@@ -18,14 +18,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// mockLogLevel 定義 mock service 輸出日誌時使用的最低日誌等級。
 const mockLogLevel = nyalog.Debug
 
 var (
-	logFile  *os.File
+	// logFile 保存可選的檔案日誌輸出目標；未指定時僅輸出到主控台。
+	logFile *os.File
+
+	// noOutput 控制是否抑制主控台日誌輸出。
 	noOutput bool
-	logMu    sync.Mutex
+
+	// logMu 保護 logFile 的併發寫入，避免多個 goroutine 同時寫檔造成內容交錯。
+	logMu sync.Mutex
 )
 
+// writeLog 依指定等級與顏色輸出 mock service 日誌，並在設定 logFile 時同步寫入檔案。
 func writeLog(level nyalog.LogLevel, color nyalog.ConsoleColor, msg string) {
 	if !noOutput {
 		nyalog.LogCC(mockLogLevel, level, color, "[mock_service]", msg)
@@ -37,8 +44,10 @@ func writeLog(level nyalog.LogLevel, color nyalog.ConsoleColor, msg string) {
 	}
 }
 
+// mockNatsWriter 將 NATS 用戶端的標準 log 輸出轉接到 mock service 的日誌系統。
 type mockNatsWriter struct{}
 
+// Write 實作 io.Writer 介面，將 NATS 用戶端輸出的單行文字寫入 mock service 日誌。
 func (w *mockNatsWriter) Write(p []byte) (n int, err error) {
 	line := strings.TrimRight(string(p), "\n\r")
 	if line == "" {
@@ -48,66 +57,81 @@ func (w *mockNatsWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// logMock 輸出一般 mock service 執行狀態日誌。
 func logMock(format string, a ...interface{}) {
 	writeLog(nyalog.Info, nyalog.Green, fmt.Sprintf(format, a...))
 }
 
+// logMockRequest 輸出請求與回應處理流程相關日誌。
 func logMockRequest(format string, a ...interface{}) {
 	writeLog(nyalog.Info, nyalog.Yellow, fmt.Sprintf(format, a...))
 }
 
+// logMockError 輸出 mock service 執行過程中的錯誤日誌。
 func logMockError(format string, a ...interface{}) {
 	writeLog(nyalog.Error, nyalog.Red, fmt.Sprintf(format, a...))
 }
 
 // routeConfig 定義單一路由與 NATS Subject 的對應關係。
 type routeConfig struct {
-	// HTTP 請求路徑
+	// Path 表示橋接層接收到的 HTTP 請求路徑。
 	Path string `json:"path" yaml:"path"`
-	// 對應的 NATS Subject
+
+	// NatsSubject 表示此 HTTP 路徑對應的 NATS Subject。
 	NatsSubject string `json:"nats_subject" yaml:"nats_subject"`
 }
 
 // mockServiceConfig 定義 mock service 啟動時所需的完整設定。
 type mockServiceConfig struct {
-	// NATS 用戶端設定
+	// NatsConfig 保存 NATS 伺服器連線與用戶端相關設定。
 	NatsConfig nyanats.NatsConfig `json:"nats_config" yaml:"nats_config"`
-	// 路由清單
+
+	// Routes 保存 HTTP 路徑與 NATS Subject 的路由對應清單。
 	Routes []routeConfig `json:"routes" yaml:"routes"`
 }
 
 // bridgeRequest 定義由橋接層傳入 mock service 的請求資料格式。
 type bridgeRequest struct {
-	// HTTP 請求方法（GET、POST 等）
+	// Method 表示 HTTP 請求方法，例如 GET、POST 等。
 	Method string `json:"method"`
-	// HTTP 請求路徑
+
+	// Path 表示 HTTP 請求路徑。
 	Path string `json:"path"`
-	// HTTP 請求標頭集合
+
+	// Headers 保存 HTTP 請求標頭集合。
 	Headers map[string]string `json:"headers"`
-	// HTTP Cookie 鍵值對集合
+
+	// Cookies 保存 HTTP Cookie 鍵值對集合。
 	Cookies map[string]string `json:"cookies"`
-	// 直接連線的用戶端 IP（取自 socket）
+
+	// RemoteAddr 表示直接連線的用戶端位址，通常取自 socket。
 	RemoteAddr string `json:"remote_addr"`
-	// 自動判斷的實際用戶端 IP（優先序：X-Real-IP > X-Forwarded-For 第一段 > RemoteAddr）
+
+	// IP 表示自動判斷出的實際用戶端 IP，優先序通常為 X-Real-IP、X-Forwarded-For 第一段、RemoteAddr。
 	IP string `json:"ip"`
-	// 請求參數集合（URL 查詢參數與 POST 表單資料）
+
+	// Params 保存請求參數集合，包含 URL 查詢參數與 POST 表單資料。
 	Params map[string]string `json:"params"`
-	// HTTP 請求本文內容
+
+	// Body 保存 HTTP 請求本文內容。
 	Body string `json:"body"`
 }
 
 // bridgeResponse 定義 mock service 回傳給橋接層的回應資料格式。
 type bridgeResponse struct {
-	// HTTP 狀態碼
+	// StatusCode 表示 HTTP 回應狀態碼。
 	StatusCode int `json:"status_code"`
-	// HTTP 回應標頭集合
+
+	// Headers 保存 HTTP 回應標頭集合。
 	Headers map[string]string `json:"headers"`
-	// HTTP 回應本文內容
+
+	// Body 保存 HTTP 回應本文內容。
 	Body string `json:"body"`
 }
 
 // loadConfig 載入指定路徑的 YAML 設定檔；若未指定路徑，則依執行檔名稱推導預設設定檔名稱。
 func loadConfig(configPath string) (*mockServiceConfig, string, error) {
+	// 未透過參數指定設定檔時，使用「執行檔名稱.yaml」作為預設設定檔名稱。
 	if configPath == "" {
 		exePath, err := os.Executable()
 		if err != nil {
@@ -118,10 +142,14 @@ func loadConfig(configPath string) (*mockServiceConfig, string, error) {
 	}
 
 	var cfg mockServiceConfig
+
+	// 讀取 YAML 設定檔內容。
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, configPath, err
 	}
+
+	// 將 YAML 內容反序列化為 mockServiceConfig。
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, configPath, err
 	}
@@ -138,11 +166,14 @@ func natsLogger() *log.Logger {
 func main() {
 	var configPath string
 	var logPath string
+
+	// 註冊命令列參數。
 	flag.StringVar(&configPath, "c", "", "yaml config file")
 	flag.StringVar(&logPath, "log", "", "log file path")
 	flag.BoolVar(&noOutput, "noout", false, "suppress console output")
 	flag.Parse()
 
+	// 若指定日誌檔路徑，則開啟或建立檔案並以附加模式寫入。
 	if logPath != "" {
 		f, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
@@ -153,6 +184,7 @@ func main() {
 		defer logFile.Close()
 	}
 
+	// 載入 mock service 設定檔。
 	cfg, resolvedPath, err := loadConfig(configPath)
 	if err != nil {
 		logMockError("載入設定檔失敗: %v (path: %s)", err, resolvedPath)
@@ -163,12 +195,14 @@ func main() {
 	logMock("NATS 伺服器: %s:%d", cfg.NatsConfig.NatsServerHost, cfg.NatsConfig.NatsServerPort)
 	logMock("共載入 %d 條路由", len(cfg.Routes))
 
+	// 建立 NATS 用戶端並確認連線狀態。
 	natsClient := nyanats.NewC(cfg.NatsConfig, natsLogger())
 	if err := natsClient.Error(); err != nil {
 		logMockError("NATS 連線失敗: %v", err)
 		return
 	}
 
+	// 依設定檔中的每條路由建立對應的 NATS 訂閱。
 	for _, route := range cfg.Routes {
 		subject := route.NatsSubject
 		httpPath := route.Path
@@ -180,15 +214,20 @@ func main() {
 			logMockRequest("原始訊息      : %s", m)
 
 			var req bridgeRequest
+
+			// 將橋接層傳入的 JSON 訊息解析為 bridgeRequest。
 			if err := json.Unmarshal([]byte(m), &req); err != nil {
 				logMockError("解析失敗      : %v", err)
 				return `{"status_code":400,"body":"Invalid request JSON"}`
 			}
 
+			// 輸出基本請求資訊，方便觀察橋接層傳入內容。
 			logMockRequest("HTTP Method  : %s", req.Method)
 			logMockRequest("HTTP Path    : %s", req.Path)
 			logMockRequest("Remote Addr  : %s", req.RemoteAddr)
 			logMockRequest("IP           : %s", req.IP)
+
+			// 將 Headers map 格式化為可讀的單行文字。
 			headerLines := make([]string, 0, len(req.Headers))
 			for k, v := range req.Headers {
 				headerLines = append(headerLines, fmt.Sprintf("%s: %s", k, v))
@@ -196,6 +235,8 @@ func main() {
 			if len(headerLines) > 0 {
 				logMockRequest("Headers      : %s", strings.Join(headerLines, ", "))
 			}
+
+			// 將 Cookies map 格式化為可讀的單行文字。
 			cookieLines := make([]string, 0, len(req.Cookies))
 			for k, v := range req.Cookies {
 				cookieLines = append(cookieLines, fmt.Sprintf("%s: %s", k, v))
@@ -203,6 +244,8 @@ func main() {
 			if len(cookieLines) > 0 {
 				logMockRequest("Cookies      : %s", strings.Join(cookieLines, ", "))
 			}
+
+			// 將 Params map 格式化為可讀的單行文字。
 			paramLines := make([]string, 0, len(req.Params))
 			for k, v := range req.Params {
 				paramLines = append(paramLines, fmt.Sprintf("%s = %s", k, v))
@@ -212,6 +255,7 @@ func main() {
 			}
 			logMockRequest("Body         : %s", req.Body)
 
+			// 建立 mock HTTP 回應資料，並將原始 method 與 path 回填到 echo 欄位。
 			resp := bridgeResponse{
 				StatusCode: 200,
 				Headers: map[string]string{
@@ -222,6 +266,8 @@ func main() {
 					req.Method, req.Path,
 				),
 			}
+
+			// 將 bridgeResponse 序列化為 JSON 字串後回傳給橋接層。
 			respJSON, _ := json.Marshal(resp)
 			respBody := string(respJSON)
 
@@ -242,10 +288,12 @@ func main() {
 
 	logMock("所有訂閱已完成，等待請求... (Ctrl+C 退出)")
 
+	// 監聽系統中斷與終止訊號，用於觸發優雅關閉流程。
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
+	// 收到退出訊號後，取消所有訂閱並關閉 NATS 用戶端連線。
 	logMock("正在關閉...")
 	if err := natsClient.UnsubscribeAll(); err != nil {
 		logMockError("UnsubscribeAll 錯誤: %v", err)

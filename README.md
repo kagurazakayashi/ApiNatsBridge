@@ -253,6 +253,25 @@ nats_config:
 
 # --- 桥接层配置 ---
 bridge:
+  # 日志输出配置
+  log:
+    stdout: true # 是否同时输出到控制台，设为 false 则仅写入日志文件
+    debug: true # 是否启用调试等级日志，设为 false 则仅输出 Info 及以上等级
+    overwrite: false # 是否使用覆盖模式，设为 true 则启动时清空现有日志文件，设为 false 或不提供则仅追加
+    color: true # 是否使用彩色控制台输出，设为 true 或不提供则使用彩色，设为 false 则纯文字
+    files:
+      # 各模块独立日志文件路径，可分别设定
+      # 留空或不填则该模块不写入文件
+      main: "logs/main.log" # 主流程日志
+      bridge: "logs/bridge.log" # 桥接路由与转发日志
+      http: "logs/http.log" # HTTP 请求日志
+      nats: "logs/nats.log" # NATS 客户端事件日志
+      httpstat: "logs/httpstat.log" # HTTP 服务器运行统计日志
+      module: "logs/module.log" # 通用模块日志（如 /ping）
+
+  # 时区，影响所有日志时间戳，支持 IANA 时区名称（如 Asia/Shanghai）或小时偏移（如 8、-5）
+  timezone: "Asia/Shanghai"
+
   # CDN 真实 IP 标头列表（按优先级排列）
   # 用于从 CDN 代理请求中提取客户端真实 IP 地址
   cdnheader:
@@ -366,11 +385,37 @@ routes:
 
 | 配置项             | 类型     | 说明                         |
 | ------------------ | -------- | ---------------------------- |
+| `log`              | object   | 日志输出配置（详见下方）     |
+| `timezone`         | string   | 时区，影响所有日志时间戳，如 `"Asia/Shanghai"` 或 `"8"` |
 | `cdnheader`        | []string | CDN 真实 IP 标头优先级列表   |
 | `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单 |
 | `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用 |
 | `limits`           | object   | 全局请求字段长度限制         |
 | `response_limits`  | object   | 全局回应字段长度限制（结构同 limits） |
+
+##### `bridge.log` — 日志输出配置
+
+| 配置项            | 类型   | 说明                                     |
+| ----------------- | ------ | ---------------------------------------- |
+| `stdout`          | bool   | 是否同时输出到控制台，`false` 则仅写文件 |
+| `debug`           | bool   | 是否启用调试等级日志，`false` 仅 Info+   |
+| `overwrite`       | bool   | 是否覆盖模式，`true` 则启动时清空现有日志文件，`false` 或不提供仅追加 |
+| `color`           | bool   | 是否彩色控制台输出，`true` 或不提供则彩色，`false` 则纯文字 |
+| `files`           | object | 各模块独立日志文件路径（详见下方）       |
+
+##### `bridge.log.files` — 模块日志文件路径
+
+| 配置项            | 类型   | 说明                         |
+| ----------------- | ------ | ---------------------------- |
+| `main`            | string | 主流程日志文件路径           |
+| `bridge`          | string | 桥接路由与转发日志文件路径   |
+| `http`            | string | HTTP 请求日志文件路径        |
+| `nats`            | string | NATS 客户端事件日志文件路径  |
+| `httpstat`        | string | HTTP 服务器运行统计日志文件路径 |
+| `module`          | string | 通用模块日志文件路径         |
+
+> 日志文件路径为相对或绝对路径均可。目录不存在时会自动创建。
+> 路径留空或不填则该模块不写入文件。若 `stdout: false` 且所有文件路径均为空，则该模块无日志输出。
 
 #### `routes` — 路由规则
 

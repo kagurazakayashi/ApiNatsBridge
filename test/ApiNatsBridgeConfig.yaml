@@ -50,6 +50,25 @@ nats_config:
 
 # --- 橋接層設定 ---
 bridge:
+  # 日誌輸出設定
+  log:
+    stdout: true # 是否同時輸出到控制台，設為 false 則僅寫入檔案
+    debug: true # 是否啟用除錯等級日誌，設為 false 則僅輸出 Info 及以上等級
+    overwrite: false # 是否使用覆蓋模式，設為 true 則啟動時清空現有日誌檔案，設為 false 或不提供則僅追加
+    color: true # 是否使用彩色控制台輸出，設為 true 或不提供則使用彩色，設為 false 則純文字
+    files:
+      # 各模組獨立日誌檔案路徑，可分別設定
+      # 留空或不填則該模組不寫入檔案
+      main: "logs/main.log" # 主流程日誌
+      bridge: "logs/bridge.log" # 橋接路由與轉發日誌
+      http: "logs/http.log" # HTTP 請求日誌
+      nats: "logs/nats.log" # NATS 用戶端事件日誌
+      httpstat: "logs/httpstat.log" # HTTP 伺服器執行統計日誌
+      module: "logs/module.log" # 通用模組日誌（如 /ping）
+
+  # 時區，影響所有日誌時間戳，支援 IANA 時區名稱（如 Asia/Shanghai、America/New_York）或小時偏移（如 8、-5）
+  timezone: "Asia/Shanghai"
+
   # CDN 服務商傳遞真實 IP 的專屬標頭清單, 若 CDN 僅使用 X-Forwarded-For，則無需加入
   cdnheader:
     - "CF-Connecting-IP" # Cloudflare
