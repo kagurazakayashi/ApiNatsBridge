@@ -1,0 +1,6 @@
+[submodule "ApiNatsBridgeTemplate"]
+	path = ApiNatsBridgeTemplate
+	url = git@github.com:MasaeProject/ApiNatsBridgeTemplate.git
+[submodule "libNyaruko_Go"]
+	path = libNyaruko_Go
+	url = git@github.com:kagurazakayashi/libNyaruko_Go.git

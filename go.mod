@@ -22,8 +22,8 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 )
 
-replace github.com/kagurazakayashi/libNyaruko_Go/nyalog => ../libNyaruko_Go/nyalog
+replace github.com/kagurazakayashi/libNyaruko_Go/nyalog => ./libNyaruko_Go/nyalog
 
-replace github.com/kagurazakayashi/libNyaruko_Go/nyanats => ../libNyaruko_Go/nyanats
+replace github.com/kagurazakayashi/libNyaruko_Go/nyanats => ./libNyaruko_Go/nyanats
 
-replace github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver => ../libNyaruko_Go/nyaapiserver
+replace github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver => ./libNyaruko_Go/nyaapiserver

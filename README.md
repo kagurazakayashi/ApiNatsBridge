@@ -87,15 +87,51 @@
 ### 前置条件
 
 - Go 1.24.4 或更高版本
-- 本项目依赖 [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) 库（`nyanats` 和 `nyaapiserver` 模块），需将其放置在与本项目同级的目录中：
+- 本项目使用 Git 子模块管理依赖，克隆后需初始化子模块（详见下方）
 
+### 初始化 Git 子模块
+
+本项目包含以下 Git 子模块：
+
+| 子模块 | 路径 | 说明 |
+|--------|------|------|
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | 依赖库（`nyalog`、`nyanats`、`nyaapiserver` 模块） |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服务模板项目 |
+
+克隆时一并拉取子模块：
+
+```bash
+git clone --recursive <repo_url>
 ```
-parent_directory/
-├── ApiNatsBridge/          # 本项目
-└── libNyaruko_Go/          # 依赖库
-    ├── nyanats/
-    └── nyaapiserver/
+
+已克隆的项目初始化子模块：
+
+```bash
+git submodule init
+git submodule update
 ```
+
+或合并为一条命令：
+
+```bash
+git submodule update --init
+```
+
+### 编译 go-gen-l10n 工具
+
+子模块 `libNyaruko_Go` 中包含本地化代码生成工具 `go-gen-l10n`，需在其目录下编译：
+
+```bash
+# Linux / macOS
+cd libNyaruko_Go/go-gen-l10n
+go build -o go-gen-l10n .
+
+# Windows
+cd libNyaruko_Go\go-gen-l10n
+go build -o go-gen-l10n.exe .
+```
+
+编译后的可执行文件需保留在 `libNyaruko_Go/go-gen-l10n/` 目录中。
 
 ### Windows 可执行文件图标嵌入
 
