@@ -15,7 +15,7 @@ func httpLogger(line string) {
 	logHTTP("%s", line)
 	if line[0] != '#' {
 		stats := nyaapiserver.GetStats()
-		logHTTPStat("請求數=%d，目前連線=%d，累計傳送=%d，累計接收=%d，運作時間=%s，封鎖IP=%v",
+		logHTTPStat(lLog.LogHttpStat(),
 			stats.TotalRequests,
 			stats.CurrentConns,
 			stats.TotalBytesSent,

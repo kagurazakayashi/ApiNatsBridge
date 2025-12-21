@@ -28,20 +28,23 @@ func main() {
 		return
 	}
 
+	// 依橋接器設定初始化多國語言。
+	InitL10n(bridgeConfig.Language)
+
 	// 依橋接器設定初始化日誌與時區。
 	InitLogConfig(bridgeConfig.Log, bridgeConfig.Timezone)
 
 	// 輸出已載入的路由數量與路由對應關係，方便啟動時確認設定狀態。
-	logMain("載入路由數量: %d", len(routes))
+	logMain(lLog.LogLoadRouteCount(), len(routes))
 	routeStrs := make([]string, len(routes))
 	for i, r := range routes {
 		routeStrs[i] = fmt.Sprintf("%s -> %s", r.Path, r.NatsSubject)
 	}
-	logMain("路由: %s", strings.Join(routeStrs, ", "))
+	logMain(lLog.LogRoutes(), strings.Join(routeStrs, ", "))
 
 	// 整理並輸出 CDN 標頭設定；若未設定 CDN 標頭則不輸出。
 	if len(bridgeConfig.CdnHeader) > 0 {
-		logMain("CDN 標頭: %s", strings.Join(bridgeConfig.CdnHeader, ", "))
+		logMain(lLog.LogCdnHeaders(), strings.Join(bridgeConfig.CdnHeader, ", "))
 	}
 
 	// 建立 NATS 用戶端，並在初始化失敗時輸出錯誤後結束程式。
@@ -78,12 +81,12 @@ func main() {
 
 	// 執行伺服器停止流程，若停止失敗則輸出錯誤資訊。
 	if err := httpAPIServer.Stop(ctx); err != nil {
-		logError("MAIN", "Stop Server: %v", err)
+		logError("MAIN", lLog.LogStopServer(), err)
 	}
 
 	// 解除所有 NATS 訂閱，避免關閉前仍保留未釋放的訂閱資源。
 	if err := natsClient.UnsubscribeAll(); err != nil {
-		logError("MAIN", "UnsubscribeAll: %v", err)
+		logError("MAIN", lLog.LogUnsubscribeAll(), err)
 	}
 
 	// 關閉 NATS 連線，完成程式結束前的資源釋放。

@@ -50,6 +50,12 @@ nats_config:
 
 # --- 橋接層設定 ---
 bridge:
+  # 多國語言設定（支援 en、zh、zh_Hant、ja）
+  language:
+    log: "zh_Hans" # 日誌輸出語言
+    http: "en" # HTTP 回應錯誤訊息語言
+    cli: "zh_Hans" # 命令列相關訊息語言
+
   # 日誌輸出設定
   log:
     stdout: true # 是否同時輸出到控制台，設為 false 則僅寫入檔案

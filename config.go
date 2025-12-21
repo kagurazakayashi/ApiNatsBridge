@@ -108,11 +108,29 @@ type BridgeLogConfig struct {
 	Files BridgeLogFilesConfig `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
+// BridgeLanguageConfig 定義各模組使用的語言設定。
+//
+// 支援的語言代碼包含：en、zh、zh_Hant、ja。
+// 未設定時使用預設值：Log="zh_Hant"、HTTP="en"、CLI="zh_Hant"。
+type BridgeLanguageConfig struct {
+	// Log 定義日誌輸出使用的語言。
+	Log string `json:"log,omitempty" yaml:"log,omitempty"`
+
+	// HTTP 定義 HTTP 回應錯誤訊息使用的語言。
+	HTTP string `json:"http,omitempty" yaml:"http,omitempty"`
+
+	// CLI 定義命令列相關訊息使用的語言。
+	CLI string `json:"cli,omitempty" yaml:"cli,omitempty"`
+}
+
 // BridgeConfig 定義 HTTP API 與 NATS 之間的橋接層設定。
 //
 // 此結構集中保存橋接服務的全域行為，包含日誌、時區、
 // CDN 真實 IP 標頭、請求與回應限制、錯誤細節白名單與 Cookie UUID 設定。
 type BridgeConfig struct {
+	// Language 定義各模組使用的語言設定；未提供時使用程式預設值。
+	Language *BridgeLanguageConfig `json:"language,omitempty" yaml:"language,omitempty"`
+
 	// Log 定義橋接層日誌相關設定；未提供時使用程式預設值。
 	Log *BridgeLogConfig `json:"log,omitempty" yaml:"log,omitempty"`
 
@@ -265,12 +283,12 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 //   - 路由轉發規則清單
 func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
 	var configPath string                                                // 保存命令列指定或自動推導出的 YAML 設定檔路徑。
-	flag.StringVar(&configPath, "c", "", "yaml/config file")             // 註冊 -c 參數，用於指定設定檔路徑。
-	flag.BoolVar(&verbose, "v", false, "verbose: log full request data") // 註冊 -v 參數，用於啟用詳細請求資料日誌。
+	flag.StringVar(&configPath, "c", "", lCLI.CliFlagConfig())   // 註冊 -c 參數，用於指定設定檔路徑。
+	flag.BoolVar(&verbose, "v", false, lCLI.CliFlagVerbose()) // 註冊 -v 參數，用於啟用詳細請求資料日誌。
 	flag.Parse()                                                         // 解析命令列參數，將結果寫入已註冊的變數。
 
 	configPath, appConfig, appConfigErr := loadConfigFile(configPath) // 讀取並解析 YAML 設定檔。
-	logMain("Config File: %s", configPath)                            // 記錄實際使用的設定檔路徑。
+	logMain(lLog.LogConfigFile(), configPath)                          // 記錄實際使用的設定檔路徑。
 	if appConfigErr != nil {                                          // 若設定檔讀取或解析失敗，記錄錯誤並回傳失敗狀態。
 		logError("MAIN", "%v", appConfigErr)        // 將設定載入錯誤寫入主流程錯誤日誌。
 		return false, nil, nil, BridgeConfig{}, nil // 回傳失敗狀態與空設定，避免後續使用無效資料。

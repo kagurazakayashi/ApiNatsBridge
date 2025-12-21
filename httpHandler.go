@@ -312,7 +312,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 
 	// 逐一路由載入設定，並建立執行期需要的查詢表。
 	for _, r := range routes {
-		logBridge("載入路由: %s -> %s (timeout=%v, methods=%v, content_type=%q, return_fields=%v)", r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType, r.ReturnFields)
+		logBridge(lLog.LogLoadRoute(), r.Path, r.NatsSubject, r.TimeoutDuration(), r.AllowedMethods(), r.ContentType, r.ReturnFields)
 
 		// 建立 HTTP path 到 NATS Subject 的對應。
 		routeMap[r.Path] = r.NatsSubject
@@ -335,7 +335,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		// 保存路由層級的請求長度限制，稍後會與全域限制合併。
 		if r.Limits != nil {
 			routeLimitsMap[r.Path] = r.Limits
-			logBridge("路由 %s 已載入自訂長度限制", r.Path)
+			logBridge(lLog.LogRouteCustomLimits(), r.Path)
 		}
 
 		// 將 return_fields 建立為 set，控制轉發給微服務的欄位範圍。
@@ -353,22 +353,22 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			routeSchemaMaps[r.Path] = schemaMap
 			url := "config://routes" + r.Path
 			if err := compiler.AddResource(url, schemaMap); err != nil {
-				logBridge("路由 %s 的 schema_body 資源添加失敗: %v", r.Path, err)
+				logBridge(lLog.LogSchemaAddFailed(), r.Path, err)
 				continue
 			}
 			schema, err := compiler.Compile(url)
 			if err != nil {
-				logBridge("路由 %s 的 schema_body 無效: %v", r.Path, err)
+				logBridge(lLog.LogSchemaInvalid(), r.Path, err)
 				continue
 			}
 			routeSchemas[r.Path] = schema
-			logBridge("路由 %s 已載入 JSON Schema 校驗", r.Path)
+			logBridge(lLog.LogSchemaLoaded(), r.Path)
 		}
 
 		// 保存路由層級的回應長度限制。
 		if r.ResponseLimits != nil {
 			routeResponseLimitsMap[r.Path] = r.ResponseLimits
-			logBridge("路由 %s 已載入回應自訂長度限制", r.Path)
+			logBridge(lLog.LogRouteResponseLimits(), r.Path)
 		}
 
 		// 建立並編譯微服務回應本文 JSON Schema。
@@ -377,23 +377,23 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			routeResponseSchemaMaps[r.Path] = responseSchemaMap
 			url := "config://routes" + r.Path + "/response"
 			if err := compiler.AddResource(url, responseSchemaMap); err != nil {
-				logBridge("路由 %s 的 response_schema_body 資源添加失敗: %v", r.Path, err)
+				logBridge(lLog.LogResponseSchemaAddFailed(), r.Path, err)
 				continue
 			}
 			schema, err := compiler.Compile(url)
 			if err != nil {
-				logBridge("路由 %s 的 response_schema_body 無效: %v", r.Path, err)
+				logBridge(lLog.LogResponseSchemaInvalid(), r.Path, err)
 				continue
 			}
 			routeResponseSchemas[r.Path] = schema
-			logBridge("路由 %s 已載入回應 JSON Schema 校驗", r.Path)
+			logBridge(lLog.LogResponseSchemaLoaded(), r.Path)
 		}
 	}
 
 	// 輸出初始化摘要，方便啟動時確認設定載入狀態。
-	logBridge("共載入 %d 條路由, %d 個 CDN 標頭", len(routeMap), len(cdnHeaders))
+	logBridge(lLog.LogLoadedSummary(), len(routeMap), len(cdnHeaders))
 	if cookieUUIDKey != "" {
-		logBridge("已啟用自動 UUID Cookie，鍵名: %s", cookieUUIDKey)
+		logBridge(lLog.LogUuidCookieEnabled(), cookieUUIDKey)
 	}
 
 	// 回傳已完成初始化的 BridgeHandler。
@@ -439,9 +439,9 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 			newUUID = strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
 			req.Cookies[h.cookieUUIDKey] = newUUID
 			if verbose {
-				logBridge("為用戶端產生新 UUID Cookie: %s=%s", h.cookieUUIDKey, newUUID)
+				logBridge(lLog.LogUuidCookieNewVerbose(), h.cookieUUIDKey, newUUID)
 			} else {
-				logBridge("為用戶端產生新 UUID Cookie: %s", h.cookieUUIDKey)
+				logBridge(lLog.LogUuidCookieNew(), h.cookieUUIDKey)
 			}
 		}
 	}
@@ -468,31 +468,31 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 // 若請求不符合任何設定路由，則會檢查內建路由，例如 /ping。
 func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 	// 記錄請求基本資訊，作為橋接層操作追蹤入口。
-	logBridge("HTTP 請求：%s %s | 來源：%s", req.Method, req.Path, req.RemoteAddr)
+	logBridge(lLog.LogHttpRequest(), req.Method, req.Path, req.RemoteAddr)
 
 	// 根據 verbose 模式決定輸出完整參數或僅輸出項目數。
 	if len(req.Params) > 0 {
 		if verbose {
-			logBridge("HTTP 參數：%v", req.Params)
+			logBridge(lLog.LogHttpParamsVerbose(), req.Params)
 		} else {
-			logBridge("HTTP 參數：%d 項", len(req.Params))
+			logBridge(lLog.LogHttpParams(), len(req.Params))
 		}
 	}
 
 	// 根據 verbose 模式決定輸出完整 Cookie 或僅輸出項目數。
 	if len(req.Cookies) > 0 {
 		if verbose {
-			logBridge("HTTP Cookie：%v", req.Cookies)
+			logBridge(lLog.LogHttpCookiesVerbose(), req.Cookies)
 		} else {
-			logBridge("HTTP Cookie：%d 項", len(req.Cookies))
+			logBridge(lLog.LogHttpCookies(), len(req.Cookies))
 		}
 	}
 
 	// 解析實際用戶端 IP，後續會用於轉發、錯誤詳細資訊判斷與日誌。
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
 	if clientIP == "" {
-		logBridge("無法解析用戶端 IP")
-		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte("Bad Request: unable to resolve client IP")}
+		logBridge(lLog.LogResolveIpFailed())
+		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte(lHTTP.HttpBadRequestResolveIp())}
 	}
 
 	// 優先檢查是否命中設定檔中的路由。
@@ -500,7 +500,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 		// 若路由設定了允許方法，則檢查目前 HTTP Method 是否被允許。
 		if allowed, hasMethods := h.routeMethods[req.Path]; hasMethods && len(allowed) > 0 {
 			if _, ok := allowed[req.Method]; !ok {
-				return &nyaapiserver.HTTPResponse{StatusCode: 405, Body: []byte("Method Not Allowed")}
+				return &nyaapiserver.HTTPResponse{StatusCode: 405, Body: []byte(lHTTP.HttpMethodNotAllowed())}
 			}
 		}
 
@@ -512,7 +512,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 					reqContentType = req.Headers["content-type"]
 				}
 				if !strings.HasPrefix(reqContentType, ct) {
-					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte("Unsupported Media Type")}
+					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte(lHTTP.HttpUnsupportedMediaType())}
 				}
 			}
 		}
@@ -538,7 +538,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			if len(req.Body) > 0 {
 				formValues, urlErr := url.ParseQuery(string(req.Body))
 				if urlErr != nil {
-					return h.errResp(400, "Invalid form body", urlErr.Error(), clientIP)
+					return h.errResp(400, lHTTP.HttpInvalidFormBody(), urlErr.Error(), clientIP)
 				}
 				formMap = make(map[string]interface{}, len(formValues))
 				for k, v := range formValues {
@@ -565,20 +565,20 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 				if err := schema.Validate(formMap); err != nil {
 					if verbose {
-						logBridge("Schema 校驗失敗 for %s: %v", req.Path, err)
+						logBridge(lLog.LogSchemaValidationFailedVerbose(), req.Path, err)
 					} else {
-						logBridge("Schema 校驗失敗 for %s", req.Path)
+						logBridge(lLog.LogSchemaValidationFailed(), req.Path)
 					}
-					return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
+					return h.errResp(400, lHTTP.HttpSchemaValidationFailed(), err.Error(), clientIP)
 				}
 			}
 
 			// 將表單 map 序列化為 JSON，讓下游微服務接收一致格式。
 			jsonBody, jsonErr := json.Marshal(formMap)
 			if jsonErr != nil {
-				return nyaapiserver.JSONResponse(500, map[string]string{
-					"error": "Internal Server Error: failed to marshal form data",
-				})
+			return nyaapiserver.JSONResponse(500, map[string]string{
+				"error": lHTTP.HttpInternalErrorMarshalForm(),
+			})
 			}
 			req.Body = jsonBody
 
@@ -588,19 +588,19 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 
 		// 非表單請求若設定了 Schema，則將 body 視為 JSON 並進行驗證。
 		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema && len(req.Body) > 0 {
-			var bodyJSON interface{}
-			if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
-				return h.errResp(400, "Invalid JSON body", err.Error(), clientIP)
-			}
-			if err := schema.Validate(bodyJSON); err != nil {
-				if verbose {
-					logBridge("Schema 校驗失敗 for %s: %v", req.Path, err)
-				} else {
-					logBridge("Schema 校驗失敗 for %s", req.Path)
-				}
-				return h.errResp(400, "Schema validation failed", err.Error(), clientIP)
-			}
+		var bodyJSON interface{}
+		if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
+			return h.errResp(400, lHTTP.HttpInvalidJsonBody(), err.Error(), clientIP)
 		}
+		if err := schema.Validate(bodyJSON); err != nil {
+			if verbose {
+				logBridge(lLog.LogSchemaValidationFailedVerbose(), req.Path, err)
+			} else {
+				logBridge(lLog.LogSchemaValidationFailed(), req.Path)
+			}
+			return h.errResp(400, lHTTP.HttpSchemaValidationFailed(), err.Error(), clientIP)
+		}
+	}
 
 		// 所有檢查通過後，將請求送往對應 NATS Subject。
 		return h.forwardToNats(req, natsSubject, clientIP)
@@ -611,7 +611,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 	case "/ping":
 		return apiping(req)
 	default:
-		return &nyaapiserver.HTTPResponse{StatusCode: 404, Body: []byte("Not Found")}
+		return &nyaapiserver.HTTPResponse{StatusCode: 404, Body: []byte(lHTTP.HttpNotFound())}
 	}
 }
 
@@ -682,7 +682,7 @@ func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRu
 	// 檢查請求路徑長度是否超過限制。
 	if r.Path.MaxLength > 0 && len(req.Path) > r.Path.MaxLength {
 		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error": "Path too long",
+			"error": lHTTP.HttpPathTooLong(),
 			"field": "path",
 			"limit": r.Path.MaxLength,
 		})
@@ -691,7 +691,7 @@ func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRu
 	// 檢查請求本文長度是否超過限制。
 	if r.Body.MaxLength > 0 && len(req.Body) > r.Body.MaxLength {
 		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error": "Body too long",
+			"error": lHTTP.HttpBodyTooLong(),
 			"field": "body",
 			"limit": r.Body.MaxLength,
 		})
@@ -730,7 +730,7 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 	// 檢查 map 項目數是否超過限制。
 	if rule.MaxCount > 0 && len(m) > rule.MaxCount {
 		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error":  "Too many entries",
+			"error":  lHTTP.HttpTooManyEntries(),
 			"field":  field,
 			"limit":  rule.MaxCount,
 			"actual": len(m),
@@ -741,7 +741,7 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 	for k, v := range m {
 		if rule.MaxKeyLen > 0 && len(k) > rule.MaxKeyLen {
 			return nyaapiserver.JSONResponse(400, map[string]interface{}{
-				"error":  "Key too long",
+				"error":  lHTTP.HttpKeyTooLong(),
 				"field":  field,
 				"key":    k,
 				"limit":  rule.MaxKeyLen,
@@ -750,7 +750,7 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 		}
 		if rule.MaxValueLen > 0 && len(v) > rule.MaxValueLen {
 			return nyaapiserver.JSONResponse(400, map[string]interface{}{
-				"error":  "Value too long",
+				"error":  lHTTP.HttpValueTooLong(),
 				"field":  field,
 				"key":    k,
 				"limit":  rule.MaxValueLen,
@@ -898,24 +898,24 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 	if effectiveLimits != nil {
 		// 檢查回應本文長度。
 		if effectiveLimits.Body.MaxLength > 0 && len(resp.Body) > effectiveLimits.Body.MaxLength {
-			return h.errResp(502, "Response body too long",
-				fmt.Sprintf("body length %d exceeds limit %d", len(resp.Body), effectiveLimits.Body.MaxLength), clientIP)
+			return h.errResp(502, lHTTP.HttpResponseBodyTooLong(),
+				fmt.Sprintf(lHTTP.HttpDetailBodyLength(), len(resp.Body), effectiveLimits.Body.MaxLength), clientIP)
 		}
 
 		// 檢查回應標頭數量與長度限制。
 		rule := effectiveLimits.Headers
 		if rule.MaxCount > 0 && len(resp.Headers) > rule.MaxCount {
-			return h.errResp(502, "Response headers too many",
-				fmt.Sprintf("count %d exceeds limit %d", len(resp.Headers), rule.MaxCount), clientIP)
+			return h.errResp(502, lHTTP.HttpResponseHeadersTooMany(),
+				fmt.Sprintf(lHTTP.HttpDetailCount(), len(resp.Headers), rule.MaxCount), clientIP)
 		}
 		for k, v := range resp.Headers {
 			if rule.MaxKeyLen > 0 && len(k) > rule.MaxKeyLen {
-				return h.errResp(502, "Response header key too long",
-					fmt.Sprintf("key=%s length %d exceeds limit %d", k, len(k), rule.MaxKeyLen), clientIP)
+				return h.errResp(502, lHTTP.HttpResponseHeaderKeyTooLong(),
+					fmt.Sprintf(lHTTP.HttpDetailKeyLength(), k, len(k), rule.MaxKeyLen), clientIP)
 			}
 			if rule.MaxValueLen > 0 && len(v) > rule.MaxValueLen {
-				return h.errResp(502, "Response header value too long",
-					fmt.Sprintf("key=%s value length %d exceeds limit %d", k, len(v), rule.MaxValueLen), clientIP)
+				return h.errResp(502, lHTTP.HttpResponseHeaderValueTooLong(),
+					fmt.Sprintf(lHTTP.HttpDetailValueLength(), k, len(v), rule.MaxValueLen), clientIP)
 			}
 		}
 	}
@@ -924,15 +924,15 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 	if schema, hasSchema := h.routeResponseSchemas[path]; hasSchema && len(resp.Body) > 0 {
 		var bodyJSON interface{}
 		if err := json.Unmarshal([]byte(resp.Body), &bodyJSON); err != nil {
-			return h.errResp(502, "Response body is not valid JSON", err.Error(), clientIP)
+			return h.errResp(502, lHTTP.HttpResponseBodyNotJson(), err.Error(), clientIP)
 		}
 		if err := schema.Validate(bodyJSON); err != nil {
 			if verbose {
-				logBridge("回應 Schema 校驗失敗 for %s: %v", path, err)
+				logBridge(lLog.LogResponseSchemaValidationFailedVerbose(), path, err)
 			} else {
-				logBridge("回應 Schema 校驗失敗 for %s", path)
+				logBridge(lLog.LogResponseSchemaValidationFailed(), path)
 			}
-			return h.errResp(502, "Response schema validation failed", err.Error(), clientIP)
+			return h.errResp(502, lHTTP.HttpResponseSchemaFailed(), err.Error(), clientIP)
 		}
 	}
 
@@ -1068,17 +1068,17 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	// 若序列化失敗，代表橋接層內部資料無法轉成可傳輸格式。
 	if err != nil {
-		return h.errResp(500, "Internal Server Error: failed to marshal request", err.Error(), clientIP)
+		return h.errResp(500, lHTTP.HttpInternalErrorMarshalRequest(), err.Error(), clientIP)
 	}
 
 	// 取得此路由的 NATS Request 逾時設定。
 	timeout := h.routeTimeouts[req.Path]
 
 	// 發送 NATS Request 並等待微服務回應。
-	logBridge("轉發請求到 NATS: subject=%s, timeout=%v", natsSubject, timeout)
+	logBridge(lLog.LogForwardNats(), natsSubject, timeout)
 	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
-		return h.errResp(502, "Bad Gateway: NATS request failed", err.Error(), clientIP)
+		return h.errResp(502, lHTTP.HttpBadGatewayNats(), err.Error(), clientIP)
 	}
 
 	// 嘗試將微服務回應解析為標準 BridgeResponse。
@@ -1086,9 +1086,9 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
 		// 若解析失敗，代表微服務回傳的是普通字串或非標準格式，直接以 200 回傳原文。
 		if verbose {
-			logBridge("BridgeResponse 解析失敗: %v, 原始回應: %s", err, respStr)
+			logBridge(lLog.LogBridgeResponseParseFailedVerbose(), err, respStr)
 		} else {
-			logBridge("BridgeResponse 解析失敗: %v", err)
+			logBridge(lLog.LogBridgeResponseParseFailed(), err)
 		}
 		return &nyaapiserver.HTTPResponse{
 			StatusCode: 200,
