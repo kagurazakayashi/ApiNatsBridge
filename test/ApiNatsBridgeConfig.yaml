@@ -50,17 +50,17 @@ nats_config:
 
 # --- 橋接層設定 ---
 bridge:
-  # 多國語言設定（支援 en、zh、zh_Hant、ja）
+  # 多國語言設定（可選值：en、zh、zh_Hant、ja）
   language:
-    log: "zh_Hans" # 日誌輸出語言
+    log: "zh" # 日誌輸出語言
     http: "en" # HTTP 回應錯誤訊息語言
-    cli: "zh_Hans" # 命令列相關訊息語言
+    cli: "zh" # 命令列相關訊息語言
 
   # 日誌輸出設定
   log:
     stdout: true # 是否同時輸出到控制台，設為 false 則僅寫入檔案
     debug: true # 是否啟用除錯等級日誌，設為 false 則僅輸出 Info 及以上等級
-    overwrite: false # 是否使用覆蓋模式，設為 true 則啟動時清空現有日誌檔案，設為 false 或不提供則僅追加
+    overwrite: true # 是否使用覆蓋模式，設為 true 則啟動時清空現有日誌檔案，設為 false 或不提供則僅追加
     color: true # 是否使用彩色控制台輸出，設為 true 或不提供則使用彩色，設為 false 則純文字
     files:
       # 各模組獨立日誌檔案路徑，可分別設定

@@ -1,27 +1,30 @@
+[English](README.md) | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md)
+
 ![ApiNatsBridge](ico/icon.png)
 
 # ApiNatsBridge
 
-轻量级 HTTP-to-NATS 网关桥接器，将标准 HTTP REST 请求转换为 NATS 消息并转发至后端微服务，再将微服务的响应返回给 HTTP 客户端。适用于微服务架构中作为 API 网关层使用。
+A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST requests into NATS messages, forwards them to backend microservices, and returns microservice responses to HTTP clients. Suitable for use as an API gateway layer in microservice architectures.
 
-## 功能特性
+## Features
 
-- **HTTP 到 NATS 请求转发** — 接收 HTTP 请求，序列化为 JSON 结构体后通过 NATS Request/Reply 模式发送到后端微服务
-- **YAML 声明式路由配置** — 通过配置文件定义 HTTP 路径与 NATS Subject 的映射关系
-- **JSON Schema 请求体校验** — 支持对请求体进行 JSON Schema 验证，拒绝不合规请求
-- **表单到 JSON 自动转换** — `application/x-www-form-urlencoded` 表单数据可依据 Schema 进行类型强转后作为 JSON 转发
-- **选择性字段转发** — 通过 `return_fields` 配置仅将需要的请求信息传递给微服务
-- **请求字段长度限制** — 全局及路由级别的路径、标头、Cookie、参数、请求体长度限制
-- **AES 加密 NATS 通信** — 支持全局密钥和按 Subject 独立密钥的 AES 对称加密
-- **CDN 真实 IP 解析** — 支持 Cloudflare、Akamai、Fastly、AWS CloudFront、阿里云 CDN 等主流 CDN 的真实客户端 IP 提取
-- **自动 UUID Cookie 生成** — 为客户端自动生成跟踪用 UUID Cookie
-- **IP 速率限制** — 内置 IP 维度的请求频率限制与封禁机制
-- **TLS/HTTPS 支持** — 配置证书即可启用 HTTPS
-- **内置 `/ping` 端点** — 延迟测量端点，不经过 NATS 转发
-- **IP 白名单错误详情** — 仅允许指定 IP 查看详细错误信息，生产环境仅返回通用错误
-- **优雅关闭** — 捕获系统信号后有序关闭 HTTP 服务器、取消 NATS 订阅并断开连接
+- **HTTP to NATS Request Forwarding** — Receives HTTP requests, serializes them into JSON structures, and sends them to backend microservices via the NATS Request/Reply pattern
+- **YAML Declarative Route Configuration** — Defines mappings between HTTP paths and NATS subjects through a configuration file
+- **JSON Schema Request Body Validation** — Supports validating request bodies against JSON Schema, rejecting non-compliant requests
+- **Form to JSON Auto-Conversion** — `application/x-www-form-urlencoded` form data can be type-coerced and forwarded as JSON based on the Schema
+- **Selective Field Forwarding** — Use the `return_fields` option to pass only the required request information to microservices
+- **Request Field Length Limits** — Global and per-route length limits for paths, headers, cookies, parameters, and request bodies
+- **AES Encrypted NATS Communication** — Supports AES symmetric encryption with a global key or per-subject keys
+- **CDN Real IP Resolution** — Supports extracting the real client IP from major CDN providers such as Cloudflare, Akamai, Fastly, AWS CloudFront, and Alibaba Cloud CDN
+- **Automatic UUID Cookie Generation** — Automatically generates UUID tracking cookies for clients
+- **IP Rate Limiting** — Built-in per-IP request rate limiting and banning mechanism
+- **TLS/HTTPS Support** — Enable HTTPS by configuring a certificate
+- **Built-in `/ping` Endpoint** — Latency measurement endpoint, bypasses NATS forwarding
+- **IP Whitelist Error Details** — Only allows specified IPs to view detailed error information; production environments return generic errors only
+- **Multi-Language Support (i18n/l10n)** — Logs, HTTP responses, and CLI help text all support multiple languages, configurable independently in the config file (supports en, zh, zh_Hant, ja)
+- **Graceful Shutdown** — Gracefully shuts down the HTTP server, cancels NATS subscriptions, and disconnects upon receiving system signals
 
-## 架构概览
+## Architecture Overview
 
 ```
 ┌──────────┐         ┌───────────────────┐         ┌────────────────┐
@@ -31,33 +34,33 @@
 └──────────┘         └───────────────────┘         └────────────────┘
 ```
 
-1. HTTP 客户端发送请求到 ApiNatsBridge
-2. ApiNatsBridge 进行路由匹配、方法校验、Content-Type 校验、长度限制校验、Schema 校验
-3. 将请求数据序列化为 `BridgeRequest` JSON，通过 NATS Request 发送到对应 Subject
-4. 后端微服务处理请求后返回 `BridgeResponse` JSON
-5. ApiNatsBridge 将响应内容作为 HTTP 响应返回给客户端
+1. HTTP client sends a request to ApiNatsBridge
+2. ApiNatsBridge performs route matching, method validation, Content-Type validation, length limit checks, and Schema validation
+3. The request data is serialized into `BridgeRequest` JSON and sent to the corresponding subject via NATS Request
+4. The backend microservice processes the request and returns `BridgeResponse` JSON
+5. ApiNatsBridge returns the response content to the client as an HTTP response
 
-## 日志模块前缀
+## Log Module Prefixes
 
-运行时日志输出使用以下前缀区分来源模块：
+Runtime log output uses the following prefixes to distinguish source modules:
 
-| 前缀 | 来源文件 | 颜色 | 用途 |
+| Prefix | Source File | Color | Purpose |
 |------|----------|------|------|
-| `[MAIN]` | `logger.go` | Cyan | 主流程生命周期日志 |
-| `[NATS]` | `natsLogger.go` | Green | NATS 客户端连接与事件 |
-| `[BRIDGE]` | `logger.go` | Yellow | 桥接路由与转发日志 |
-| `[HTTP]` | `logger.go` | Blue | HTTP 请求日志行 |
-| `[HTTPSTAT]` | `logger.go` | Purple | HTTP 服务器运行时统计 |
-| `[MODULE]` | `logger.go` | Cyan | 通用模块日志（如 `/ping`） |
-| `[NATS][ERROR]` | `logger.go` | Red | NATS 连接错误 |
-| `[HTTP][ERROR]` | `logger.go` | Red | HTTP 服务器错误 |
-| `[MAIN][ERROR]` | `logger.go` | Red | 主流程致命错误 |
+| `[MAIN]` | `logger.go` | Cyan | Main process lifecycle logs |
+| `[NATS]` | `natsLogger.go` | Green | NATS client connection and events |
+| `[BRIDGE]` | `logger.go` | Yellow | Bridge routing and forwarding logs |
+| `[HTTP]` | `logger.go` | Blue | HTTP request log lines |
+| `[HTTPSTAT]` | `logger.go` | Purple | HTTP server runtime statistics |
+| `[MODULE]` | `logger.go` | Cyan | Generic module logs (e.g., `/ping`) |
+| `[NATS][ERROR]` | `logger.go` | Red | NATS connection errors |
+| `[HTTP][ERROR]` | `logger.go` | Red | HTTP server errors |
+| `[MAIN][ERROR]` | `logger.go` | Red | Fatal errors in the main process |
 
-所有前缀均通过本地库 `libNyaruko_Go/nyalog` 的 `LogCC()` 函数输出。
+All prefixes are output via the `LogCC()` function from the local library `libNyaruko_Go/nyalog`.
 
-## 数据结构
+## Data Structures
 
-### BridgeRequest（发送给微服务）
+### BridgeRequest (sent to microservice)
 
 ```json
 {
@@ -72,7 +75,7 @@
 }
 ```
 
-### BridgeResponse（微服务返回）
+### BridgeResponse (returned by microservice)
 
 ```json
 {
@@ -82,83 +85,94 @@
 }
 ```
 
-## 安装与编译
+## Installation and Compilation
 
-### 前置条件
+### Prerequisites
 
-- Go 1.24.4 或更高版本
-- 本项目使用 Git 子模块管理依赖，克隆后需初始化子模块（详见下方）
+- Go 1.24.4 or higher
+- This project uses Git submodules for dependency management; after cloning, submodules must be initialized (see below)
 
-### 初始化 Git 子模块
+### Initializing Git Submodules
 
-本项目包含以下 Git 子模块：
+This project includes the following Git submodules:
 
-| 子模块 | 路径 | 说明 |
+| Submodule | Path | Description |
 |--------|------|------|
-| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | 依赖库（`nyalog`、`nyanats`、`nyaapiserver` 模块） |
-| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服务模板项目 |
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | Dependency libraries (`nyalog`, `nyanats`, `nyaapiserver` modules) |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | Microservice template project |
 
-克隆时一并拉取子模块：
+Clone with submodules:
 
 ```bash
 git clone --recursive <repo_url>
 ```
 
-已克隆的项目初始化子模块：
+Initialize submodules in an already-cloned project:
 
 ```bash
 git submodule init
 git submodule update
 ```
 
-或合并为一条命令：
+Or combine into a single command:
 
 ```bash
 git submodule update --init
 ```
 
-### 编译 go-gen-l10n 工具
+### Building the go-gen-l10n Tool
 
-子模块 `libNyaruko_Go` 中包含本地化代码生成工具 `go-gen-l10n`，需在其目录下编译：
+The submodule `libNyaruko_Go` includes the localization code generation tool `go-gen-l10n`. Build it from the project root:
 
 ```bash
 # Linux / macOS
-cd libNyaruko_Go/go-gen-l10n
-go build -o go-gen-l10n .
+go build -o go-gen-l10n ./libNyaruko_Go/go-gen-l10n
 
 # Windows
-cd libNyaruko_Go\go-gen-l10n
-go build -o go-gen-l10n.exe .
+go build -o go-gen-l10n.exe ./libNyaruko_Go\go-gen-l10n
 ```
 
-编译后的可执行文件需保留在 `libNyaruko_Go/go-gen-l10n/` 目录中。
-
-### Windows 可执行文件图标嵌入
-
-生成资源文件（`.syso`），之后 `go build` 会自动链接：
+After building, `go-gen-l10n` (or `go-gen-l10n.exe`) will be generated in the project root. After modifying `l10n/app_*.arb` language files, run the following command to regenerate code:
 
 ```bash
-# 通过 go generate 自动调用 go-winres（推荐）
+# Linux / macOS
+./go-gen-l10n -dir ./l10n -pkg l10n -lang zh_Hant
+
+# Windows
+.\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
+```
+
+Or use `go generate`:
+```bash
+go generate ./l10nGlobal.go
+```
+
+### Embedding an Icon in the Windows Executable
+
+Generate the resource file (`.syso`), which `go build` will automatically link:
+
+```bash
+# Using go generate to invoke go-winres automatically (recommended)
 go generate ./...
 
-# 或手动执行
+# Or manually run
 go-winres make
 ```
 
-> 资源配置文件位于 `winres/winres.json`，图标源文件位于 `ico/icon.png`。
-> `.syso` 文件已在 `.gitignore` 中被忽略，每次构建前需重新生成。
+> The resource configuration file is located at `winres/winres.json`, and the icon source file is at `ico/icon.png`.
+> The `.syso` file is ignored in `.gitignore` and must be regenerated before each build.
 
-### 本平台编译
+### Building for the Current Platform
 
 ```bash
-# 先生成图标资源（Windows 平台需要，其他平台可跳过）
+# Generate the icon resource first (required on Windows, can be skipped on other platforms)
 go generate ./...
 
-# 编译（ Windows 的话加上 .exe ）
+# Build (add .exe on Windows)
 go build -o ApiNatsBridge .
 ```
 
-### 多平台交叉编译
+### Cross-Platform Compilation
 
 #### Linux (amd64)
 
@@ -202,114 +216,120 @@ GOOS=windows GOARCH=arm64 go build -o ApiNatsBridge-windows-arm64.exe .
 GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 ```
 
-> **提示：** 在 Windows PowerShell 下设置环境变量使用 `$env:GOOS="linux"; $env:GOARCH="amd64"` 后再执行 `go build`。
+> **Tip:** In Windows PowerShell, set environment variables using `$env:GOOS="linux"; $env:GOARCH="amd64"` before running `go build`.
 
-## 使用方法
+## Usage
 
-### 命令行参数
+### Command-Line Arguments
 
-| 参数        | 说明                                                                       |
+| Argument | Description |
 | ----------- | -------------------------------------------------------------------------- |
-| `-c <路径>` | 指定 YAML 配置文件路径。若未指定，默认读取与可执行文件同名的 `.yaml` 文件  |
-| `-v`        | 详细模式。输出完整的请求/响应数据（标头、参数、Cookie、Schema 校验错误等） |
+| `-c <path>` | Specifies the YAML configuration file path. If not specified, defaults to a `.yaml` file with the same name as the executable |
+| `-v` | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.) |
 
-### 启动示例
+### Startup Examples
 
 ```bash
-# 使用默认配置文件（与可执行文件同名的 .yaml）
+# Use default config file (a .yaml file with the same name as the executable)
 ./ApiNatsBridge
 
-# 指定配置文件
+# Specify a config file
 ./ApiNatsBridge -c /etc/apibridge/config.yaml
 
-# 详细模式
+# Verbose mode
 ./ApiNatsBridge -c config.yaml -v
 ```
 
-## 配置文件详解
+## Configuration File Details
 
-配置文件采用 YAML 格式，包含以下四个主要部分。
+The configuration file uses YAML format and contains four main sections.
 
-### 完整配置示例
+### Complete Configuration Example
 
 ```yaml
 # ===========================================================
-# ApiNatsBridge 配置文件
+# ApiNatsBridge Configuration File
 # ===========================================================
 
-# --- HTTP API 服务器配置 ---
+# --- HTTP API Server Configuration ---
 httpapiserver_config:
-  # 监听地址（设为 0.0.0.0 则监听所有网卡）
+  # Listen address (set to 0.0.0.0 to listen on all interfaces)
   httpapiserver_host: "127.0.0.1"
-  # 监听端口
+  # Listen port
   httpapiserver_port: 9080
 
-  # TLS 证书路径（两项均填写时启用 HTTPS，留空则使用 HTTP）
+  # TLS certificate paths (HTTPS is enabled when both fields are provided; leave empty for HTTP)
   httpapiserver_tls_cert_file: ""
   httpapiserver_tls_key_file: ""
 
-  # 超时设置（秒）
-  httpapiserver_read_timeout: 5 # 读取请求超时
-  httpapiserver_write_timeout: 30 # 写入响应超时
-  httpapiserver_idle_timeout: 60 # 空闲连接超时
+  # Timeout settings (seconds)
+  httpapiserver_read_timeout: 5 # Read request timeout
+  httpapiserver_write_timeout: 30 # Write response timeout
+  httpapiserver_idle_timeout: 60 # Idle connection timeout
 
-  # IP 速率限制
-  httpapiserver_enable_rate_limit: true # 是否启用速率限制
-  httpapiserver_limit_requests: 50 # 每个时间窗口内允许的最大请求数
-  httpapiserver_limit_window: 1 # 时间窗口长度（秒）
-  httpapiserver_block_duration: 600 # 超出限制后封禁时长（秒）
+  # IP rate limiting
+  httpapiserver_enable_rate_limit: true # Whether to enable rate limiting
+  httpapiserver_limit_requests: 50 # Maximum number of requests allowed per time window
+  httpapiserver_limit_window: 1 # Time window length (seconds)
+  httpapiserver_block_duration: 600 # Ban duration after exceeding the limit (seconds)
 
-# --- NATS 客户端配置 ---
+# --- NATS Client Configuration ---
 nats_config:
-  # NATS 服务器地址和端口
+  # NATS server address and port
   nats_server_host: 127.0.0.1
   nats_server_port: 4222
 
-  # 连接认证（留空则不启用认证）
+  # Connection authentication (leave empty to disable authentication)
   nats_user: webapi
   nats_password: your_nats_password_here
 
-  # 客户端标识名称（在 NATS 服务器端可见）
+  # Client identification name (visible on the NATS server side)
   nats_client_name: ApiNatsBridge
 
-  # 重连策略
-  nats_max_reconnects: 5 # 最大重连次数
-  nats_reconnect_wait: 2 # 重连等待间隔（秒）
-  nats_connect_timeout: 10 # 初次连接超时（秒）
+  # Reconnection strategy
+  nats_max_reconnects: 5 # Maximum number of reconnection attempts
+  nats_reconnect_wait: 2 # Reconnection wait interval (seconds)
+  nats_connect_timeout: 10 # Initial connection timeout (seconds)
 
-  # AES 对称加密密钥（长度必须为 16、24 或 32 字节）
-  # 留空则明文传输 NATS 消息
+  # AES symmetric encryption key (length must be 16, 24, or 32 bytes)
+  # Leave empty to transmit NATS messages in plain text
   nats_encryption_key: "YOUR_32_CHAR_ENCRYPTION_KEY_HERE!"
 
-  # 按 Subject 独立设置加密密钥（优先于全局密钥）
-  # 设为空字符串表示该 Subject 使用明文传输
+  # Per-subject encryption keys (takes precedence over the global key)
+  # Set to an empty string to use plain text for that subject
   nats_theme_keys:
     "sensitive.subject": "PER_SUBJECT_KEY_32_CHARS_LONG!!!"
     "public.subject": ""
 
-# --- 桥接层配置 ---
+# --- Bridge Layer Configuration ---
 bridge:
-  # 日志输出配置
-  log:
-    stdout: true # 是否同时输出到控制台，设为 false 则仅写入日志文件
-    debug: true # 是否启用调试等级日志，设为 false 则仅输出 Info 及以上等级
-    overwrite: false # 是否使用覆盖模式，设为 true 则启动时清空现有日志文件，设为 false 或不提供则仅追加
-    color: true # 是否使用彩色控制台输出，设为 true 或不提供则使用彩色，设为 false 则纯文字
-    files:
-      # 各模块独立日志文件路径，可分别设定
-      # 留空或不填则该模块不写入文件
-      main: "logs/main.log" # 主流程日志
-      bridge: "logs/bridge.log" # 桥接路由与转发日志
-      http: "logs/http.log" # HTTP 请求日志
-      nats: "logs/nats.log" # NATS 客户端事件日志
-      httpstat: "logs/httpstat.log" # HTTP 服务器运行统计日志
-      module: "logs/module.log" # 通用模块日志（如 /ping）
+  # Multi-language configuration (valid values: en, zh, zh_Hant, ja)
+  language:
+    log: "zh_Hant" # Log output language
+    http: "en" # HTTP response error message language
+    cli: "zh_Hant" # CLI-related message language
 
-  # 时区，影响所有日志时间戳，支持 IANA 时区名称（如 Asia/Shanghai）或小时偏移（如 8、-5）
+  # Log output configuration
+  log:
+    stdout: true # Whether to also output to the console; set to false to write to log files only
+    debug: true # Whether to enable debug-level logging; set to false to output Info level and above only
+    overwrite: false # Whether to use overwrite mode; set to true to clear existing log files on startup; set to false or omit to append only
+    color: true # Whether to use colored console output; set to true or omit for color; set to false for plain text
+    files:
+      # Independent log file paths for each module; may be configured individually
+      # Leave empty or omit to disable file writing for that module
+      main: "logs/main.log" # Main process log
+      bridge: "logs/bridge.log" # Bridge routing and forwarding log
+      http: "logs/http.log" # HTTP request log
+      nats: "logs/nats.log" # NATS client event log
+      httpstat: "logs/httpstat.log" # HTTP server runtime statistics log
+      module: "logs/module.log" # Generic module log (e.g., /ping)
+
+  # Timezone, affects all log timestamps; supports IANA timezone names (e.g., Asia/Shanghai) or hour offsets (e.g., 8, -5)
   timezone: "Asia/Shanghai"
 
-  # CDN 真实 IP 标头列表（按优先级排列）
-  # 用于从 CDN 代理请求中提取客户端真实 IP 地址
+  # CDN real IP header list (ordered by priority)
+  # Used to extract the client's real IP address from CDN proxy requests
   cdnheader:
     - "CF-Connecting-IP" # Cloudflare
     - "True-Client-IP" # Akamai / Cloudflare Enterprise
@@ -320,40 +340,40 @@ bridge:
     - "Incap-Client-IP" # Imperva / Incapsula
     - "X-Sucuri-ClientIP" # Sucuri
     - "X-SP-Forwarding-IP" # StackPath
-    - "Ali-Cdn-Real-Ip" # 阿里云 CDN
+    - "Ali-Cdn-Real-Ip" # Alibaba Cloud CDN
     - "Ar-Real-IP" # ArvanCloud
 
-  # 允许查看详细错误信息的 IP 白名单（用于开发调试）
-  # 不在此列表中的 IP 仅收到通用错误提示
+  # IP whitelist for viewing detailed error information (for development and debugging)
+  # IPs not in this list will only receive generic error messages
   error_detail_ips:
     - "127.0.0.1"
     - "::1"
 
-  # 自动 UUID Cookie 键名
-  # 设置后，对每个无此 Cookie 的客户端自动生成 UUID 并通过 Set-Cookie 下发
-  # 留空或不填则不启用
+  # Automatic UUID Cookie key name
+  # When set, a UUID is automatically generated for each client without this cookie and sent via Set-Cookie
+  # Leave empty or omit to disable
   cookie_uuid_key: "brid"
 
-  # 全局请求字段长度限制（0 或省略表示不限制）
+  # Global request field length limits (0 or omitted means no limit)
   limits:
     path:
-      max_length: 2048 # 请求路径最大字节长度
+      max_length: 2048 # Maximum request path byte length
     headers:
-      max_count: 64 # 请求标头最大数量
-      max_key_length: 256 # 标头名称最大字节长度
-      max_value_length: 4096 # 标头值最大字节长度
+      max_count: 64 # Maximum number of request headers
+      max_key_length: 256 # Maximum header name byte length
+      max_value_length: 4096 # Maximum header value byte length
     cookies:
-      max_count: 32 # Cookie 最大数量
-      max_key_length: 256 # Cookie 名称最大字节长度
-      max_value_length: 4096 # Cookie 值最大字节长度
+      max_count: 32 # Maximum number of cookies
+      max_key_length: 256 # Maximum cookie name byte length
+      max_value_length: 4096 # Maximum cookie value byte length
     params:
-      max_count: 64 # 参数最大数量
-      max_key_length: 256 # 参数名称最大字节长度
-      max_value_length: 4096 # 参数值最大字节长度
+      max_count: 64 # Maximum number of parameters
+      max_key_length: 256 # Maximum parameter name byte length
+      max_value_length: 4096 # Maximum parameter value byte length
     body:
-      max_length: 1048576 # 请求体最大字节长度（1MB）
+      max_length: 1048576 # Maximum request body byte length (1MB)
 
-# --- 路由转发规则 ---
+# --- Route Forwarding Rules ---
 routes:
   - path: "/api/user"
     nats_subject: "user_service"
@@ -384,119 +404,181 @@ routes:
           type: string
 ```
 
-### 配置项详解
+### Configuration Items in Detail
 
-#### `httpapiserver_config` — HTTP 服务器配置
+#### `httpapiserver_config` — HTTP Server Configuration
 
-| 配置项                            | 类型   | 说明                                   |
+| Item | Type | Description |
 | --------------------------------- | ------ | -------------------------------------- |
-| `httpapiserver_host`              | string | 服务器监听地址，`0.0.0.0` 监听所有网卡 |
-| `httpapiserver_port`              | int    | 监听端口                               |
-| `httpapiserver_tls_cert_file`     | string | TLS 证书文件路径，留空使用 HTTP        |
-| `httpapiserver_tls_key_file`      | string | TLS 私钥文件路径，留空使用 HTTP        |
-| `httpapiserver_read_timeout`      | int    | 读取请求超时（秒）                     |
-| `httpapiserver_write_timeout`     | int    | 写入响应超时（秒）                     |
-| `httpapiserver_idle_timeout`      | int    | 空闲连接超时（秒）                     |
-| `httpapiserver_enable_rate_limit` | bool   | 是否启用 IP 速率限制                   |
-| `httpapiserver_limit_requests`    | int    | 时间窗口内最大请求数                   |
-| `httpapiserver_limit_window`      | int    | 速率限制时间窗口（秒）                 |
-| `httpapiserver_block_duration`    | int    | 超限后封禁时长（秒）                   |
+| `httpapiserver_host` | string | Server listen address; `0.0.0.0` listens on all interfaces |
+| `httpapiserver_port` | int | Listen port |
+| `httpapiserver_tls_cert_file` | string | TLS certificate file path; leave empty for HTTP |
+| `httpapiserver_tls_key_file` | string | TLS private key file path; leave empty for HTTP |
+| `httpapiserver_read_timeout` | int | Read request timeout (seconds) |
+| `httpapiserver_write_timeout` | int | Write response timeout (seconds) |
+| `httpapiserver_idle_timeout` | int | Idle connection timeout (seconds) |
+| `httpapiserver_enable_rate_limit` | bool | Whether to enable IP rate limiting |
+| `httpapiserver_limit_requests` | int | Maximum number of requests per time window |
+| `httpapiserver_limit_window` | int | Rate limit time window (seconds) |
+| `httpapiserver_block_duration` | int | Ban duration after exceeding the limit (seconds) |
 
-#### `nats_config` — NATS 客户端配置
+#### `nats_config` — NATS Client Configuration
 
-| 配置项                 | 类型   | 说明                                        |
+| Item | Type | Description |
 | ---------------------- | ------ | ------------------------------------------- |
-| `nats_server_host`     | string | NATS 服务器地址                             |
-| `nats_server_port`     | int    | NATS 服务器端口                             |
-| `nats_user`            | string | NATS 用户名，留空不认证                     |
-| `nats_password`        | string | NATS 密码                                   |
-| `nats_client_name`     | string | 连接标识名称                                |
-| `nats_max_reconnects`  | int    | 最大重连次数                                |
-| `nats_reconnect_wait`  | int    | 重连间隔（秒）                              |
-| `nats_connect_timeout` | int    | 连接超时（秒）                              |
-| `nats_encryption_key`  | string | AES 全局加密密钥（16/24/32 字节），留空明文 |
-| `nats_theme_keys`      | map    | 按 Subject 独立设置的加密密钥               |
+| `nats_server_host` | string | NATS server address |
+| `nats_server_port` | int | NATS server port |
+| `nats_user` | string | NATS username; leave empty for no authentication |
+| `nats_password` | string | NATS password |
+| `nats_client_name` | string | Connection identification name |
+| `nats_max_reconnects` | int | Maximum number of reconnection attempts |
+| `nats_reconnect_wait` | int | Reconnection interval (seconds) |
+| `nats_connect_timeout` | int | Connection timeout (seconds) |
+| `nats_encryption_key` | string | AES global encryption key (16/24/32 bytes); leave empty for plain text |
+| `nats_theme_keys` | map | Per-subject encryption keys |
 
-#### `bridge` — 桥接层配置
+#### `bridge` — Bridge Layer Configuration
 
-| 配置项             | 类型     | 说明                         |
+| Item | Type | Description |
 | ------------------ | -------- | ---------------------------- |
-| `log`              | object   | 日志输出配置（详见下方）     |
-| `timezone`         | string   | 时区，影响所有日志时间戳，如 `"Asia/Shanghai"` 或 `"8"` |
-| `cdnheader`        | []string | CDN 真实 IP 标头优先级列表   |
-| `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单 |
-| `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用 |
-| `limits`           | object   | 全局请求字段长度限制         |
-| `response_limits`  | object   | 全局回应字段长度限制（结构同 limits） |
+| `language` | object | Multi-language configuration (see below) |
+| `log` | object | Log output configuration (see below) |
+| `timezone` | string | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
+| `cdnheader` | []string | CDN real IP header priority list |
+| `error_detail_ips` | []string | IP whitelist allowed to view detailed errors |
+| `cookie_uuid_key` | string | UUID Cookie key name; leave empty to disable |
+| `limits` | object | Global request field length limits |
+| `response_limits` | object | Global response field length limits (same structure as limits) |
 
-##### `bridge.log` — 日志输出配置
+##### `bridge.language` — Multi-Language Configuration
 
-| 配置项            | 类型   | 说明                                     |
+| Item | Type | Default | Description |
+| ------ | ------ | ----------- | --------------------------------- |
+| `log` | string | `"zh_Hant"` | Log output language |
+| `http` | string | `"en"` | HTTP response error message language |
+| `cli` | string | `"zh_Hant"` | CLI-related message language |
+
+> Supported language codes: `en`, `zh`, `zh_Hant`, `ja`.
+>
+> **Important:** Language text modifications should be made in the translation source files `l10n/app_*.arb`. Do **not** directly edit the `l10n/app_localizations_*.go` generated files, as they will be overwritten during regeneration.
+>
+> After modifying `.arb` files, run the following command to regenerate the Go code:
+> ```bash
+> # Windows
+> .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
+>
+> # Or use go generate
+> go generate .\l10nGlobal.go
+> ```
+>
+> #### Language Style Conventions
+>
+> | Language Code | Language | Style |
+> |----------|------|------|
+> | `zh` | Simplified Chinese | Mainland China (大陆简体) |
+> | `zh_Hant` | Traditional Chinese | Taiwan (臺灣繁體) |
+> | `en` | English | Standard |
+> | `ja` | Japanese | Standard |
+>
+> #### ARB Files
+>
+> | File | Language |
+> |------|------|
+> | `l10n/app_zh.arb` | Simplified Chinese (Mainland) |
+> | `l10n/app_zh_Hant.arb` | Traditional Chinese (Taiwan) |
+> | `l10n/app_en.arb` | English |
+> | `l10n/app_ja.arb` | Japanese |
+>
+> #### Documentation Files (README)
+>
+> | File | Language |
+> |------|------|
+> | `README.md` | English |
+> | `README.zh-Hans.md` | Simplified Chinese (Mainland) |
+> | `README.zh-Hant.md` | Traditional Chinese (Taiwan) |
+> | `README.ja.md` | Japanese |
+>
+> #### Multi-Language Editing Rules
+>
+> When modifying ARB language files or README documentation files, **all language versions must be updated simultaneously**.
+>
+> - **ARB files:** After modifying any `.arb` file, run `go-gen-l10n` to regenerate Go code:
+>   ```bash
+>   # Windows
+>   .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
+>   # Linux / macOS
+>   ./go-gen-l10n -dir ./l10n -pkg l10n -lang zh_Hant
+>   ```
+> - **README files:** When updating any README, apply the same changes to all four language versions (`README.md`, `README.zh-Hans.md`, `README.zh-Hant.md`, `README.ja.md`).
+>
+> ##### `bridge.log` — Log Output Configuration
+
+| Item | Type | Description |
 | ----------------- | ------ | ---------------------------------------- |
-| `stdout`          | bool   | 是否同时输出到控制台，`false` 则仅写文件 |
-| `debug`           | bool   | 是否启用调试等级日志，`false` 仅 Info+   |
-| `overwrite`       | bool   | 是否覆盖模式，`true` 则启动时清空现有日志文件，`false` 或不提供仅追加 |
-| `color`           | bool   | 是否彩色控制台输出，`true` 或不提供则彩色，`false` 则纯文字 |
-| `files`           | object | 各模块独立日志文件路径（详见下方）       |
+| `stdout` | bool | Whether to also output to the console; `false` writes to files only |
+| `debug` | bool | Whether to enable debug-level logging; `false` enables Info+ only |
+| `overwrite` | bool | Whether to use overwrite mode; `true` clears existing log files on startup; `false` or omission appends only |
+| `color` | bool | Whether to use colored console output; `true` or omission enables color; `false` uses plain text |
+| `files` | object | Independent log file paths for each module (see below) |
 
-##### `bridge.log.files` — 模块日志文件路径
+##### `bridge.log.files` — Module Log File Paths
 
-| 配置项            | 类型   | 说明                         |
+| Item | Type | Description |
 | ----------------- | ------ | ---------------------------- |
-| `main`            | string | 主流程日志文件路径           |
-| `bridge`          | string | 桥接路由与转发日志文件路径   |
-| `http`            | string | HTTP 请求日志文件路径        |
-| `nats`            | string | NATS 客户端事件日志文件路径  |
-| `httpstat`        | string | HTTP 服务器运行统计日志文件路径 |
-| `module`          | string | 通用模块日志文件路径         |
+| `main` | string | Main process log file path |
+| `bridge` | string | Bridge routing and forwarding log file path |
+| `http` | string | HTTP request log file path |
+| `nats` | string | NATS client event log file path |
+| `httpstat` | string | HTTP server runtime statistics log file path |
+| `module` | string | Generic module log file path |
 
-> 日志文件路径为相对或绝对路径均可。目录不存在时会自动创建。
-> 路径留空或不填则该模块不写入文件。若 `stdout: false` 且所有文件路径均为空，则该模块无日志输出。
+> Log file paths can be relative or absolute. Directories are created automatically if they do not exist.
+> Leave empty or omit a path to disable file writing for that module. If `stdout: false` and all file paths are empty, that module produces no log output.
 
-#### `routes` — 路由规则
+#### `routes` — Route Rules
 
-| 配置项          | 类型     | 默认值         | 说明                         |
+| Item | Type | Default | Description |
 | --------------- | -------- | -------------- | ---------------------------- |
-| `path`          | string   | （必填）       | HTTP 请求路径                |
-| `nats_subject`  | string   | （必填）       | 转发的 NATS Subject          |
-| `methods`       | []string | []（允许全部） | 允许的 HTTP 方法列表         |
-| `content_type`  | string   | ""（不校验）   | 要求的 Content-Type 前缀     |
-| `timeout`       | int      | 30             | NATS 响应超时（秒）          |
-| `return_fields` | []string | []（返回全部） | 转发给微服务的字段选择       |
-| `limits`              | object   | -              | 路由级别长度限制（覆盖全局）                 |
-| `schema_body`         | object   | -              | 请求体 JSON Schema 校验                      |
-| `response_limits`     | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
-| `response_schema_body`| object   | -              | 回应体 JSON Schema 校验（结构同 schema_body） |
+| `path` | string | (required) | HTTP request path |
+| `nats_subject` | string | (required) | Forwarding NATS subject |
+| `methods` | []string | [] (allow all) | List of allowed HTTP methods |
+| `content_type` | string | "" (no check) | Required Content-Type prefix |
+| `timeout` | int | 30 | NATS response timeout (seconds) |
+| `return_fields` | []string | [] (return all) | Field selection for forwarding to microservice |
+| `limits` | object | - | Route-level length limits (overrides global) |
+| `schema_body` | object | - | Request body JSON Schema validation |
+| `response_limits` | object | - | Route-level response length limits (overrides global response_limits) |
+| `response_schema_body` | object | - | Response body JSON Schema validation (same structure as schema_body) |
 
-#### `return_fields` 可选值
+#### `return_fields` Options
 
-| 字段名        | 说明                             |
+| Field | Description |
 | ------------- | -------------------------------- |
-| `method`      | HTTP 请求方法                    |
-| `path`        | 请求路径                         |
-| `headers`     | 请求标头（键值对）               |
-| `cookies`     | Cookie（键值对）                 |
-| `remote_addr` | 直连 TCP 地址（含端口）          |
-| `ip`          | 解析后的真实客户端 IP            |
-| `params`      | URL 查询参数和表单参数（键值对） |
-| `body`        | 请求体原始内容                   |
+| `method` | HTTP request method |
+| `path` | Request path |
+| `headers` | Request headers (key-value pairs) |
+| `cookies` | Cookies (key-value pairs) |
+| `remote_addr` | Direct TCP address (including port) |
+| `ip` | Resolved real client IP |
+| `params` | URL query parameters and form parameters (key-value pairs) |
+| `body` | Raw request body content |
 
-#### `schema_body` JSON Schema 校验
+#### `schema_body` JSON Schema Validation
 
-除标准 JSON Schema 字段外，支持两个控制键：
+In addition to standard JSON Schema fields, two control keys are supported:
 
-| 控制键      | 类型   | 说明                                             |
+| Control Key | Type | Description |
 | ----------- | ------ | ------------------------------------------------ |
-| `root_type` | string | 根节点预期类型（如 `object`、`array`）           |
-| `strict`    | bool   | 严格模式，为 `true` 时拒绝 Schema 中未定义的字段 |
+| `root_type` | string | Expected root node type (e.g., `object`, `array`) |
+| `strict` | bool | Strict mode; when `true`, rejects fields not defined in the Schema |
 
-其余字段遵循 [JSON Schema](https://json-schema.org/) 规范（如 `required`、`properties`、`type` 等）。
+Other fields follow the [JSON Schema](https://json-schema.org/) specification (e.g., `required`, `properties`, `type`, etc.).
 
-## 用途示范
+## Usage Examples
 
-### 场景一：基础 JSON API 网关
+### Scenario 1: Basic JSON API Gateway
 
-将前端 JSON 请求转发至用户微服务：
+Forward frontend JSON requests to a user microservice:
 
 ```yaml
 routes:
@@ -521,7 +603,7 @@ routes:
           type: string
 ```
 
-客户端请求：
+Client request:
 
 ```bash
 curl -X POST http://127.0.0.1:9080/api/login \
@@ -529,9 +611,9 @@ curl -X POST http://127.0.0.1:9080/api/login \
   -d '{"username":"admin","password":"123456"}'
 ```
 
-### 场景二：表单提交转 JSON
+### Scenario 2: Form Submission to JSON
 
-将传统 HTML 表单提交自动转为 JSON 后转发：
+Automatically convert traditional HTML form submissions to JSON before forwarding:
 
 ```yaml
 routes:
@@ -556,18 +638,18 @@ routes:
           type: integer
 ```
 
-客户端请求：
+Client request:
 
 ```bash
 curl -X POST http://127.0.0.1:9080/api/feedback \
   -d "message=Great+service&rating=5"
 ```
 
-表单中的 `rating=5` 会根据 Schema 定义的 `type: integer` 自动从字符串转换为整数 `5`。
+The form field `rating=5` is automatically converted from string to integer `5` based on the Schema's `type: integer` definition.
 
-### 场景三：仅转发特定字段
+### Scenario 3: Forward Only Specific Fields
 
-只将 HTTP 方法和路径传给微服务（适用于简单的健康检查类路由）：
+Send only the HTTP method and path to the microservice (suitable for simple health-check routes):
 
 ```yaml
 routes:
@@ -580,26 +662,26 @@ routes:
       - path
 ```
 
-### 场景四：使用内置 Ping 端点测量延迟
+### Scenario 4: Measuring Latency with the Built-in Ping Endpoint
 
 ```bash
-# 发送带时间戳的请求
+# Send a request with a timestamp
 curl -X POST http://127.0.0.1:9080/ping \
   -H "X-Timestamp-Ms: $(date +%s%3N)"
 
-# 返回示例: {"pong": 3}  (单位: 毫秒)
+# Example response: {"pong": 3}  (unit: milliseconds)
 ```
 
-### 场景五：加密 NATS 通信
+### Scenario 5: Encrypted NATS Communication
 
-为敏感的支付服务使用独立加密密钥：
+Use a dedicated encryption key for a sensitive payment service:
 
 ```yaml
 nats_config:
   nats_encryption_key: "DEFAULT_GLOBAL_KEY_32_CHARS_OK!!"
   nats_theme_keys:
     "payment.process": "PAYMENT_DEDICATED_KEY_32_CHARS!!"
-    "public.notify": "" # 此 Subject 明文传输
+    "public.notify": "" # This subject uses plain text transmission
 
 routes:
   - path: "/api/pay"
@@ -609,22 +691,22 @@ routes:
     timeout: 60
 ```
 
-## 客户端 IP 解析优先级
+## Client IP Resolution Priority
 
-解析客户端真实 IP 地址时按以下优先级：
+When resolving the client's real IP address, the following priority order is used:
 
-1. CDN 专属标头（`cdnheader` 列表中的标头，按列表顺序依次查找）
-2. `X-Real-IP` 标头
-3. `X-Forwarded-For` 标头中的第一个有效 IP
-4. TCP 连接的远程地址（`RemoteAddr`）
+1. CDN-specific headers (the headers listed in `cdnheader`, searched in list order)
+2. `X-Real-IP` header
+3. The first valid IP in the `X-Forwarded-For` header
+4. The TCP connection's remote address (`RemoteAddr`)
 
-所有候选值均会验证其是否为合法 IP 地址。
+All candidate values are validated as legal IP addresses.
 
-## 微服务端开发指南
+## Microservice Development Guide
 
-后端微服务只需订阅对应的 NATS Subject，接收 `BridgeRequest` JSON，处理后返回 `BridgeResponse` JSON 即可。
+Backend microservices simply need to subscribe to the corresponding NATS subject, receive `BridgeRequest` JSON, process it, and return `BridgeResponse` JSON.
 
-### Go 示例
+### Go Example
 
 ```go
 type BridgeRequest struct {
@@ -645,72 +727,72 @@ type BridgeResponse struct {
 }
 ```
 
-微服务处理逻辑：
+Microservice processing logic:
 
-1. 订阅 NATS Subject（如 `user_service`）
-2. 收到消息后解析为 `BridgeRequest`
-3. 执行业务逻辑
-4. 构造 `BridgeResponse` JSON 并返回
+1. Subscribe to a NATS subject (e.g., `user_service`)
+2. Upon receiving a message, parse it as `BridgeRequest`
+3. Execute business logic
+4. Construct `BridgeResponse` JSON and return it
 
-如果微服务返回的不是合法的 `BridgeResponse` JSON，ApiNatsBridge 会将原始响应字符串作为 HTTP 200 响应体直接返回给客户端。
+If the microservice returns something other than valid `BridgeResponse` JSON, ApiNatsBridge will return the raw response string directly to the client as an HTTP 200 response body.
 
-## 本地服务环境
+## Local Service Environment
 
-项目包含完整的本地测试环境（位于 `test/` 目录）：
+The project includes a complete local testing environment (located in the `test/` directory):
 
 ```bash
-# Windows 下一键启动（启动 NATS Server、Mock 微服务、ApiNatsBridge）
+# One-click startup on Windows (starts NATS Server, Mock Microservice, ApiNatsBridge)
 serve.bat
 ```
 
 ```bash
-# 一键停止所有服务
+# One-click stop of all services
 serve_stop.bat
 ```
 
-启动流程：
+Startup process:
 
-1. 启动本地 NATS 服务器（`test/nats-server/`）
-2. 启动 Mock 微服务（`test/mock-microservice/`）
-3. 启动 ApiNatsBridge 主程序
+1. Start the local NATS server (`test/nats-server/`)
+2. Start the Mock microservice (`test/mock-microservice/`)
+3. Start the ApiNatsBridge main program
 
-启动后可执行 HTTP 测试脚本（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）。
+After startup, you can run HTTP test scripts (`test/ping.bat`, `test/test.bat`, `test/test_form.bat`).
 
-### Mock 微服务命令行参数
+### Mock Microservice Command-Line Arguments
 
-Mock 微服务（`test/mock-microservice/`）支持以下启动参数：
+The Mock microservice (`test/mock-microservice/`) supports the following startup arguments:
 
-| 参数           | 说明                                                    |
+| Argument | Description |
 | -------------- | ------------------------------------------------------- |
-| `-c <路径>`    | 指定 YAML 配置文件路径（同 ApiNatsBridge）               |
-| `--log <路径>` | 将日志写入指定文件（同时控制台正常输出）                 |
-| `--noout`      | 禁止控制台日志输出（通常与 `--log` 搭配使用）            |
+| `-c <path>` | Specifies the YAML configuration file path (same as ApiNatsBridge) |
+| `--log <path>` | Writes logs to the specified file (console output remains normal) |
+| `--noout` | Suppresses console log output (usually used with `--log`) |
 
-启动示例：
+Startup examples:
 
 ```bash
-# 正常启动
+# Normal startup
 go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml
 
-# 写日志到文件
+# Write logs to a file
 go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log
 
-# 仅写日志到文件，不输出控制台
+# Write logs to a file only, no console output
 go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log --noout
 ```
 
-## 依赖项
+## Dependencies
 
-| 包                                                                                                        | 用途                |
+| Package | Purpose |
 | --------------------------------------------------------------------------------------------------------- | ------------------- |
-| [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID 生成           |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API 服务器框架 |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go)      | NATS 客户端封装     |
-| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml)                                                       | YAML 配置解析       |
-| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema)                 | JSON Schema 校验    |
-| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go)                                          | NATS Go 客户端      |
+| [github.com/google/uuid](https://github.com/google/uuid) | UUID generation |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API server framework |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go) | NATS client wrapper |
+| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml) | YAML configuration parsing |
+| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema) | JSON Schema validation |
+| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go) | NATS Go client |
 
-## 许可证
+## License
 
 ```LICENSE
 Copyright (c) 2026 KagurazakaYashi
