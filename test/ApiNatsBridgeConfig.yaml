@@ -125,80 +125,58 @@ bridge:
 
 # --- 路由轉發規則 ---
 routes:
-  - path: "/ping" # HTTP 請求路徑
+  - path: "/ping" # HTTP 請求路徑（對應 ApiNatsBridgeTemplate）
     nats_subject: "ping_req" # 轉發至 NATS 的 Subject
-    methods: ["GET"] # 允許的 HTTP 方法
-    content_type: "" # 要求的 Content-Type（空=不檢查）
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"] # 允許的 HTTP 方法（所有選項）
+    content_type: "application/x-www-form-urlencoded" # 要求的 Content-Type（空=不檢查；亦可用 application/json）
     timeout: 10 # NATS 等待微服務回應的逾時秒數
-    return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
-      - path #   可選值：本條就是所有可選值
-      - headers
-      - cookies
-      - remote_addr
-      - ip
-      - params
-      - body
-  - path: "/test" # HTTP 請求路徑
-    nats_subject: "test_req" # 轉發至 NATS 的 Subject
-    methods: ["GET", "POST"] # 允許的 HTTP 方法
-    content_type: "application/json" # 要求的 Content-Type 前綴
-    timeout: 60 # NATS 等待微服務回應的逾時秒數
-    return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
-      - path
-      - headers
-      - cookies
-      - remote_addr
-      - ip
-      - params
-      - body
-    # 路由級別長度限制（可選，每項皆可選，會覆蓋 bridge.limits 的對應欄位）
+    return_fields: # 返回給 NATS 的欄位（所有選項）
+      - method # HTTP 請求方法
+      - path # 請求路徑
+      - headers # 請求標頭
+      - cookies # 請求 Cookie
+      - remote_addr # 遠端位址（含端口）
+      - ip # 客戶端 IP（已解析 CDN 標頭）
+      - params # URL 查詢參數
+      - body # 請求本文
     limits:
+      path:
+        max_length: 5 # "/ping" 固定 5 字元
       body:
-        max_length: 65536 # 此路由僅接受最大 64KB 的請求本文
+        max_length: 0 # 不接收請求體
       headers:
-        max_count: 32 # 此路由僅接受最多 32 個標頭
-    schema_body: # JSON Schema 校驗規則（可選）
-      root_type: object #   控制鍵：根節點類型
-      strict: true #   控制鍵：嚴格模式，拒絕未知欄位
-      required: #   JSON Schema：必須包含的鍵
-        - message
-      properties: #   JSON Schema：欄位定義
-        message:
+        max_count: 8 # 典型請求標頭數量
+        max_key_length: 24 # 最長標頭名如 X-Forwarded-For
+        max_value_length: 256
+      params:
+        max_count: 1 # 僅接受 timestamp
+        max_key_length: 9 # "timestamp" = 9
+        max_value_length: 19 # int64 正數最大值 9223372036854775807
+      cookies:
+        max_count: 4
+        max_key_length: 8
+        max_value_length: 36 # UUID 格式 8-4-4-4-12
+    schema_body: # 對應 application/x-www-form-urlencoded 的欄位結構
+      root_type: object
+      strict: true
+      properties:
+        timestamp:
           type: string
-    response_limits: # 回應資料長度限制（可選，每項皆可選）
+    response_limits:
       body:
-        max_length: 65536
-    response_schema_body: # 回應 JSON Schema 校驗規則（可選）
+        max_length: 76 # {"pong":±9223372036854775808,"ip":"0000:0000:0000:0000:0000:0000:0000:0000"}
+      headers:
+        max_count: 1 # 僅 Content-Type
+        max_key_length: 12 # "Content-Type"
+        max_value_length: 31 # "application/json; charset=utf-8"
+    response_schema_body: # 驗證 ApiNatsBridgeTemplate 的 pingResponse 結構
       root_type: object
       strict: true
       required:
-        - status
+        - pong
+        - ip
       properties:
-        status:
-          type: string
-        result:
-          type: string
-  - path: "/test_form" # HTTP 請求路徑（表單提交測試）
-    nats_subject: "test_req" # 轉發至 NATS 的 Subject
-    methods: ["POST"] # 允許的 HTTP 方法
-    content_type: "application/x-www-form-urlencoded"
-    timeout: 60 # NATS 等待微服務回應的逾時秒數
-    return_fields: # 返回給 NATS 的欄位（可選，可多選）
-      - method #   留空陣列或不提供則返回所有，只留一个则返回它的内容本身
-      - path
-      - headers
-      - cookies
-      - remote_addr
-      - ip
-      - params
-      - body
-    schema_body: # JSON Schema 校驗規則
-      root_type: object
-      strict: true
-      required:
-        - message
-      properties:
-        message:
+        pong:
+          type: integer
+        ip:
           type: string

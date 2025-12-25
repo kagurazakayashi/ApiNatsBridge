@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/MasaeProject/ApiNatsBridge/l10n"
+	"github.com/kagurazakayashi/ApiNatsBridge/l10n"
 )
 
 var lLog l10n.AppLocalizations = l10n.GetLocalizations("zh_Hant")

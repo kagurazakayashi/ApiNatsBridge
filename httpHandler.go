@@ -606,13 +606,8 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 		return h.forwardToNats(req, natsSubject, clientIP)
 	}
 
-	// 未命中設定路由時，檢查內建路由。
-	switch req.Path {
-	case "/ping":
-		return apiping(req)
-	default:
-		return &nyaapiserver.HTTPResponse{StatusCode: 404, Body: []byte(lHTTP.HttpNotFound())}
-	}
+	// 未命中設定路由，回傳 404。
+	return &nyaapiserver.HTTPResponse{StatusCode: 404, Body: []byte(lHTTP.HttpNotFound())}
 }
 
 // mergeLimitRule 會合併全域與路由層級的限制規則。

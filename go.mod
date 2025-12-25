@@ -1,4 +1,4 @@
-module github.com/MasaeProject/ApiNatsBridge
+module github.com/kagurazakayashi/ApiNatsBridge
 
 go 1.24.4
 
