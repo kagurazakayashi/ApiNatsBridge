@@ -26,6 +26,10 @@ var logConfig *BridgeLogConfig
 // 實際使用時會透過 resolveTimeLocation 轉換為 *time.Location。
 var logTimezone string
 
+// logFilePath 保存透過 --log 參數指定的統一日誌檔案路徑。
+// 若不為空，所有模組的日誌都會同時寫入此檔案。
+var logFilePath string
+
 // fileMu 用於保護多個 goroutine 同時寫入日誌檔案時的同步安全。
 // 所有檔案寫入操作都應透過此 mutex 序列化，避免多行日誌內容交錯。
 var fileMu sync.Mutex
@@ -53,6 +57,11 @@ func InitLogConfig(cfg *BridgeLogConfig, timezone string) {
 	nyalog.SetTimeZone(loc)
 	if cfg.Overwrite {
 		truncateLogFiles(cfg)
+		if logFilePath != "" {
+			dir := filepath.Dir(logFilePath)
+			os.MkdirAll(dir, 0755)
+			os.WriteFile(logFilePath, nil, 0644)
+		}
 	}
 }
 
@@ -192,6 +201,7 @@ func logMain(format string, a ...interface{}) {
 	if logConfig != nil {
 		writeToFile(logConfig.Files.Main, nyalog.Cyan, "[MAIN]", msg)
 	}
+	writeToFile(logFilePath, nyalog.Cyan, "[MAIN]", msg)
 }
 
 // logError 輸出指定模組的錯誤日誌。
@@ -238,6 +248,7 @@ func logError(module string, format string, a ...interface{}) {
 		}
 		writeToFile(filePath, nyalog.Red, prefix, msg)
 	}
+	writeToFile(logFilePath, nyalog.Red, prefix, msg)
 }
 
 // logBridge 輸出橋接流程相關的資訊日誌。
@@ -256,6 +267,7 @@ func logBridge(format string, a ...interface{}) {
 	if logConfig != nil {
 		writeToFile(logConfig.Files.Bridge, nyalog.Yellow, "[BRIDGE]", msg)
 	}
+	writeToFile(logFilePath, nyalog.Yellow, "[BRIDGE]", msg)
 }
 
 // logHTTP 輸出 HTTP 模組相關的資訊日誌。
@@ -274,6 +286,7 @@ func logHTTP(format string, a ...interface{}) {
 	if logConfig != nil {
 		writeToFile(logConfig.Files.HTTP, nyalog.Blue, "[HTTP]", msg)
 	}
+	writeToFile(logFilePath, nyalog.Blue, "[HTTP]", msg)
 }
 
 // logHTTPStat 輸出 HTTP 統計相關的日誌。
@@ -293,6 +306,7 @@ func logHTTPStat(format string, a ...interface{}) {
 	if logConfig != nil {
 		writeToFile(logConfig.Files.HTTPStat, nyalog.Purple, "[HTTPSTAT]", msg)
 	}
+	writeToFile(logFilePath, nyalog.Purple, "[HTTPSTAT]", msg)
 }
 
 // logModule 輸出一般模組相關的資訊日誌。
@@ -312,4 +326,5 @@ func logModule(format string, a ...interface{}) {
 	if logConfig != nil {
 		writeToFile(logConfig.Files.Module, nyalog.Cyan, "[MODULE]", msg)
 	}
+	writeToFile(logFilePath, nyalog.Cyan, "[MODULE]", msg)
 }

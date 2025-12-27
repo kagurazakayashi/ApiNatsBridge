@@ -62,5 +62,6 @@
   "http_detail_key_length": "key=%s length %d exceeds limit %d",
   "http_detail_value_length": "key=%s value length %d exceeds limit %d",
   "cli_flag_config": "yaml 設定ファイルパス",
-  "cli_flag_verbose": "詳細モード：完全なリクエストデータを記録"
+  "cli_flag_verbose": "詳細モード：完全なリクエストデータを記録",
+  "cli_flag_output": "すべてのログを指定ファイルに出力"
 }

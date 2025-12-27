@@ -19,7 +19,7 @@
 - **自动 UUID Cookie 生成** — 为客户端自动生成跟踪用 UUID Cookie
 - **IP 速率限制** — 内置 IP 维度的请求频率限制与封禁机制
 - **TLS/HTTPS 支持** — 配置证书即可启用 HTTPS
-- **内置 `/ping` 端点** — 延迟测量端点，不经过 NATS 转发
+- **`/ping` 端点** — 通过 NATS 微服务实现的延迟测量端点
 - **IP 白名单错误详情** — 仅允许指定 IP 查看详细错误信息，生产环境仅返回通用错误
 - **多国语言支持 (i18n/l10n)** — 日志、HTTP 响应、CLI 帮助文本均支持多语言，可在配置文件中分别设置（支持 en、zh、zh_Hant、ja）
 - **优雅关闭** — 捕获系统信号后有序关闭 HTTP 服务器、取消 NATS 订阅并断开连接
@@ -51,7 +51,7 @@
 | `[BRIDGE]` | `logger.go` | Yellow | 桥接路由与转发日志 |
 | `[HTTP]` | `logger.go` | Blue | HTTP 请求日志行 |
 | `[HTTPSTAT]` | `logger.go` | Purple | HTTP 服务器运行时统计 |
-| `[MODULE]` | `logger.go` | Cyan | 通用模块日志（如 `/ping`） |
+| `[MODULE]` | `logger.go` | Cyan | 通用模块日志 |
 | `[NATS][ERROR]` | `logger.go` | Red | NATS 连接错误 |
 | `[HTTP][ERROR]` | `logger.go` | Red | HTTP 服务器错误 |
 | `[MAIN][ERROR]` | `logger.go` | Red | 主流程致命错误 |
@@ -226,6 +226,7 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 | ----------- | -------------------------------------------------------------------------- |
 | `-c <路径>` | 指定 YAML 配置文件路径。若未指定，默认读取与可执行文件同名的 `.yaml` 文件  |
 | `-v`        | 详细模式。输出完整的请求/响应数据（标头、参数、Cookie、Schema 校验错误等） |
+| `-o <路径>` | 将所有日志输出到指定文件（同时仍会输出到控制台和各模块日志文件）           |
 
 ### 启动示例
 
@@ -238,6 +239,9 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 
 # 详细模式
 ./ApiNatsBridge -c config.yaml -v
+
+# 将所有日志输出到统一文件
+./ApiNatsBridge -c config.yaml -o ../logs/all.log
 ```
 
 ## 配置文件详解
@@ -323,7 +327,7 @@ bridge:
       http: "logs/http.log" # HTTP 请求日志
       nats: "logs/nats.log" # NATS 客户端事件日志
       httpstat: "logs/httpstat.log" # HTTP 服务器运行统计日志
-      module: "logs/module.log" # 通用模块日志（如 /ping）
+      module: "logs/module.log" # 通用模块日志
 
   # 时区，影响所有日志时间戳，支持 IANA 时区名称（如 Asia/Shanghai）或小时偏移（如 8、-5）
   timezone: "Asia/Shanghai"
@@ -640,15 +644,16 @@ routes:
       - path
 ```
 
-### 场景四：使用内置 Ping 端点测量延迟
+### 场景四：使用 Ping 端点测量延迟
 
 ```bash
-# 发送带时间戳的请求
-curl -X POST http://127.0.0.1:9080/ping \
-  -H "X-Timestamp-Ms: $(date +%s%3N)"
+# 发送带时间戳参数的 GET 请求
+curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# 返回示例: {"pong": 3}  (单位: 毫秒)
+# 返回示例: {"pong": 3, "ip": "127.0.0.1"}  (单位: 毫秒)
 ```
+
+`/ping` 路由通过 NATS 转发至 `ApiNatsBridgeTemplate` 微服务，由其计算延迟并返回客户端 IP。
 
 ### 场景五：加密 NATS 通信
 
@@ -716,10 +721,10 @@ type BridgeResponse struct {
 
 ## 本地服务环境
 
-项目包含完整的本地测试环境（位于 `test/` 目录）：
+项目包含完整的本地测试环境（位于 `test/` 目录）及模板微服务（`ApiNatsBridgeTemplate/`）：
 
 ```bash
-# Windows 下一键启动（启动 NATS Server、Mock 微服务、ApiNatsBridge）
+# Windows 下一键启动（启动 NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate）
 serve.bat
 ```
 
@@ -731,33 +736,26 @@ serve_stop.bat
 启动流程：
 
 1. 启动本地 NATS 服务器（`test/nats-server/`）
-2. 启动 Mock 微服务（`test/mock-microservice/`）
-3. 启动 ApiNatsBridge 主程序
+2. 启动 ApiNatsBridge 主程序
+3. 启动 ApiNatsBridgeTemplate 微服务（`ApiNatsBridgeTemplate/`）
 
-启动后可执行 HTTP 测试脚本（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）。
-
-### Mock 微服务命令行参数
-
-Mock 微服务（`test/mock-microservice/`）支持以下启动参数：
-
-| 参数           | 说明                                                    |
-| -------------- | ------------------------------------------------------- |
-| `-c <路径>`    | 指定 YAML 配置文件路径（同 ApiNatsBridge）               |
-| `--log <路径>` | 将日志写入指定文件（同时控制台正常输出）                 |
-| `--noout`      | 禁止控制台日志输出（通常与 `--log` 搭配使用）            |
-
-启动示例：
+启动后可执行 HTTP 测试脚本（`test/ping.bat`）：
 
 ```bash
-# 正常启动
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml
-
-# 写日志到文件
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log
-
-# 仅写日志到文件，不输出控制台
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log --noout
+# 发送 ping 请求（ApiNatsBridgeTemplate 返回 {pong, ip}）
+curl "http://127.0.0.1:9080/ping?timestamp=0"
 ```
+
+### ApiNatsBridgeTemplate
+
+模板微服务订阅 `ping_req` NATS 主题，读取 `timestamp` 参数，返回 `{"pong": <延迟毫秒>, "ip": "<客户端 IP>"}`。
+
+```bash
+# 使用默认配置启动
+go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml
+```
+
+详情请参见 `ApiNatsBridgeTemplate/README.md`。
 
 ## 依赖项
 

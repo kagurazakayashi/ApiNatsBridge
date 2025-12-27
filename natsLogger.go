@@ -28,6 +28,9 @@ func (w *natsLogWriter) Write(p []byte) (n int, err error) {
 		writeToFile(logConfig.Files.NATS, nyalog.Green, "[NATS]", line)
 	}
 
+	// 若已設定統一日誌檔案路徑，則同步寫入統一日誌檔案。
+	writeToFile(logFilePath, nyalog.Green, "[NATS]", line)
+
 	return len(p), nil
 }
 

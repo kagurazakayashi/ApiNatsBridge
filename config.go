@@ -282,10 +282,11 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 //   - 橋接層設定
 //   - 路由轉發規則清單
 func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
-	var configPath string                                                // 保存命令列指定或自動推導出的 YAML 設定檔路徑。
-	flag.StringVar(&configPath, "c", "", lCLI.CliFlagConfig())   // 註冊 -c 參數，用於指定設定檔路徑。
-	flag.BoolVar(&verbose, "v", false, lCLI.CliFlagVerbose()) // 註冊 -v 參數，用於啟用詳細請求資料日誌。
-	flag.Parse()                                                         // 解析命令列參數，將結果寫入已註冊的變數。
+	var configPath string                                                    // 保存命令列指定或自動推導出的 YAML 設定檔路徑。
+	flag.StringVar(&configPath, "c", "", lCLI.CliFlagConfig())       // 註冊 -c 參數，用於指定設定檔路徑。
+	flag.BoolVar(&verbose, "v", false, lCLI.CliFlagVerbose())     // 註冊 -v 參數，用於啟用詳細請求資料日誌。
+	flag.StringVar(&logFilePath, "o", "", lCLI.CliFlagOutput()) // 註冊 -o 參數，用於指定統一日誌檔案路徑。
+	flag.Parse()                                                             // 解析命令列參數，將結果寫入已註冊的變數。
 
 	configPath, appConfig, appConfigErr := loadConfigFile(configPath) // 讀取並解析 YAML 設定檔。
 	logMain(lLog.LogConfigFile(), configPath)                          // 記錄實際使用的設定檔路徑。

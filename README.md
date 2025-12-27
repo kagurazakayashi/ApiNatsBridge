@@ -19,7 +19,7 @@ A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST reque
 - **Automatic UUID Cookie Generation** — Automatically generates UUID tracking cookies for clients
 - **IP Rate Limiting** — Built-in per-IP request rate limiting and banning mechanism
 - **TLS/HTTPS Support** — Enable HTTPS by configuring a certificate
-- **Built-in `/ping` Endpoint** — Latency measurement endpoint, bypasses NATS forwarding
+- **`/ping` Endpoint** — Latency measurement endpoint via NATS microservice
 - **IP Whitelist Error Details** — Only allows specified IPs to view detailed error information; production environments return generic errors only
 - **Multi-Language Support (i18n/l10n)** — Logs, HTTP responses, and CLI help text all support multiple languages, configurable independently in the config file (supports en, zh, zh_Hant, ja)
 - **Graceful Shutdown** — Gracefully shuts down the HTTP server, cancels NATS subscriptions, and disconnects upon receiving system signals
@@ -51,7 +51,7 @@ Runtime log output uses the following prefixes to distinguish source modules:
 | `[BRIDGE]` | `logger.go` | Yellow | Bridge routing and forwarding logs |
 | `[HTTP]` | `logger.go` | Blue | HTTP request log lines |
 | `[HTTPSTAT]` | `logger.go` | Purple | HTTP server runtime statistics |
-| `[MODULE]` | `logger.go` | Cyan | Generic module logs (e.g., `/ping`) |
+| `[MODULE]` | `logger.go` | Cyan | Generic module logs |
 | `[NATS][ERROR]` | `logger.go` | Red | NATS connection errors |
 | `[HTTP][ERROR]` | `logger.go` | Red | HTTP server errors |
 | `[MAIN][ERROR]` | `logger.go` | Red | Fatal errors in the main process |
@@ -225,7 +225,8 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 | Argument | Description |
 | ----------- | -------------------------------------------------------------------------- |
 | `-c <path>` | Specifies the YAML configuration file path. If not specified, defaults to a `.yaml` file with the same name as the executable |
-| `-v` | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.) |
+| `-v`        | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.) |
+| `-o <path>` | Outputs all logs to the specified file (in addition to console and per-module log files) |
 
 ### Startup Examples
 
@@ -238,6 +239,9 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 
 # Verbose mode
 ./ApiNatsBridge -c config.yaml -v
+
+# Output all logs to a unified file
+./ApiNatsBridge -c config.yaml -o ../logs/all.log
 ```
 
 ## Configuration File Details
@@ -323,7 +327,7 @@ bridge:
       http: "logs/http.log" # HTTP request log
       nats: "logs/nats.log" # NATS client event log
       httpstat: "logs/httpstat.log" # HTTP server runtime statistics log
-      module: "logs/module.log" # Generic module log (e.g., /ping)
+      module: "logs/module.log" # Generic module log
 
   # Timezone, affects all log timestamps; supports IANA timezone names (e.g., Asia/Shanghai) or hour offsets (e.g., 8, -5)
   timezone: "Asia/Shanghai"
@@ -662,15 +666,16 @@ routes:
       - path
 ```
 
-### Scenario 4: Measuring Latency with the Built-in Ping Endpoint
+### Scenario 4: Measuring Latency with the Ping Endpoint
 
 ```bash
-# Send a request with a timestamp
-curl -X POST http://127.0.0.1:9080/ping \
-  -H "X-Timestamp-Ms: $(date +%s%3N)"
+# Send a GET request with a timestamp query parameter
+curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# Example response: {"pong": 3}  (unit: milliseconds)
+# Example response: {"pong": 3, "ip": "127.0.0.1"}  (unit: milliseconds)
 ```
+
+The `/ping` route is forwarded via NATS to the `ApiNatsBridgeTemplate` microservice, which calculates the delay and returns the client IP.
 
 ### Scenario 5: Encrypted NATS Communication
 
@@ -738,10 +743,10 @@ If the microservice returns something other than valid `BridgeResponse` JSON, Ap
 
 ## Local Service Environment
 
-The project includes a complete local testing environment (located in the `test/` directory):
+The project includes a complete local testing environment (located in the `test/` directory) and a template microservice (`ApiNatsBridgeTemplate/`):
 
 ```bash
-# One-click startup on Windows (starts NATS Server, Mock Microservice, ApiNatsBridge)
+# One-click startup on Windows (starts NATS Server, ApiNatsBridge, ApiNatsBridgeTemplate)
 serve.bat
 ```
 
@@ -753,33 +758,26 @@ serve_stop.bat
 Startup process:
 
 1. Start the local NATS server (`test/nats-server/`)
-2. Start the Mock microservice (`test/mock-microservice/`)
-3. Start the ApiNatsBridge main program
+2. Start the ApiNatsBridge main program
+3. Start the ApiNatsBridgeTemplate microservice (`ApiNatsBridgeTemplate/`)
 
-After startup, you can run HTTP test scripts (`test/ping.bat`, `test/test.bat`, `test/test_form.bat`).
-
-### Mock Microservice Command-Line Arguments
-
-The Mock microservice (`test/mock-microservice/`) supports the following startup arguments:
-
-| Argument | Description |
-| -------------- | ------------------------------------------------------- |
-| `-c <path>` | Specifies the YAML configuration file path (same as ApiNatsBridge) |
-| `--log <path>` | Writes logs to the specified file (console output remains normal) |
-| `--noout` | Suppresses console log output (usually used with `--log`) |
-
-Startup examples:
+After startup, you can run the HTTP test script (`test/ping.bat`)：
 
 ```bash
-# Normal startup
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml
-
-# Write logs to a file
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log
-
-# Write logs to a file only, no console output
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log --noout
+# Send a ping request (ApiNatsBridgeTemplate responds with {pong, ip})
+curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 ```
+
+### ApiNatsBridgeTemplate
+
+The template microservice subscribes to the `ping_req` NATS subject, reads the `timestamp` parameter, and returns `{"pong": <delay_ms>, "ip": "<client_ip>"}`.
+
+```bash
+# Start with default config
+go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml
+```
+
+For more details, see `ApiNatsBridgeTemplate/README.md`.
 
 ## Dependencies
 

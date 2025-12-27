@@ -8,12 +8,12 @@ ECHO   ApiNatsBridge Service Stopper
 ECHO ============================================
 ECHO.
 
-ECHO *** Stopping ApiNatsBridge ***
-TASKKILL /F /IM ApiNatsBridge.exe /T 2>NUL
+ECHO *** Stopping ApiNatsBridgeTemplate ***
+TASKKILL /F /IM ApiNatsBridgeTemplate.exe /T 2>NUL
 TIMEOUT /T 2 /NOBREAK >NUL
 
-ECHO *** Stopping Mock Microservice ***
-TASKKILL /F /IM mock-microservice.exe /T 2>NUL
+ECHO *** Stopping ApiNatsBridge ***
+TASKKILL /F /IM ApiNatsBridge.exe /T 2>NUL
 TIMEOUT /T 2 /NOBREAK >NUL
 
 ECHO *** Stopping NATS Server ***

@@ -19,7 +19,7 @@
 - **自動 UUID Cookie 生成** — クライアントに追跡用 UUID Cookie を自動生成
 - **IP レート制限** — IP 単位のリクエスト頻度制限とブロック機構を内蔵
 - **TLS/HTTPS サポート** — 証明書を設定することで HTTPS を有効化可能
-- **組み込み `/ping` エンドポイント** — NATS 転送を経由しない遅延測定エンドポイント
+- **`/ping` エンドポイント** — NATS マイクロサービス経由の遅延測定エンドポイント
 - **IP ホワイトリストエラー詳細** — 指定された IP のみが詳細なエラー情報を閲覧可能、本番環境では一般的なエラーのみを返す
 - **多言語サポート (i18n/l10n)** — ログ、HTTP レスポンス、CLI ヘルプテキストを多言語対応、設定ファイルで個別に設定可能（en、zh、zh_Hant、ja 対応）
 - **グレースフルシャットダウン** — システムシグナルを捕捉後、HTTP サーバーを順序立てて停止し、NATS サブスクリプションを解除して接続を切断
@@ -51,7 +51,7 @@
 | `[BRIDGE]` | `logger.go` | Yellow | ブリッジルーティングと転送ログ |
 | `[HTTP]` | `logger.go` | Blue | HTTP リクエストログ行 |
 | `[HTTPSTAT]` | `logger.go` | Purple | HTTP サーバー実行時統計 |
-| `[MODULE]` | `logger.go` | Cyan | 汎用モジュールログ（`/ping` など） |
+| `[MODULE]` | `logger.go` | Cyan | 汎用モジュールログ |
 | `[NATS][ERROR]` | `logger.go` | Red | NATS 接続エラー |
 | `[HTTP][ERROR]` | `logger.go` | Red | HTTP サーバーエラー |
 | `[MAIN][ERROR]` | `logger.go` | Red | メインプロセスの致命的エラー |
@@ -227,6 +227,7 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 | ----------- | -------------------------------------------------------------------------- |
 | `-c <パス>` | YAML 設定ファイルのパスを指定。未指定の場合は実行可能ファイルと同名の `.yaml` ファイルをデフォルトで読み込みます |
 | `-v`        | 詳細モード。完全なリクエスト/レスポンスデータ（ヘッダー、パラメータ、Cookie、Schema 検証エラーなど）を出力します |
+| `-o <パス>` | すべてのログを指定ファイルに出力（コンソールと各モジュールのログファイルへも引き続き出力されます） |
 
 ### 起動例
 
@@ -239,6 +240,9 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 
 # 詳細モード
 ./ApiNatsBridge -c config.yaml -v
+
+# すべてのログを統合ファイルに出力
+./ApiNatsBridge -c config.yaml -o ../logs/all.log
 ```
 
 ## 設定ファイル詳細
@@ -324,7 +328,7 @@ bridge:
       http: "logs/http.log" # HTTP リクエストログ
       nats: "logs/nats.log" # NATS クライアントイベントログ
       httpstat: "logs/httpstat.log" # HTTP サーバー実行統計ログ
-      module: "logs/module.log" # 汎用モジュールログ（/ping など）
+      module: "logs/module.log" # 汎用モジュールログ
 
   # タイムゾーン、すべてのログタイムスタンプに影響、IANA タイムゾーン名（例：Asia/Tokyo）または時間オフセット（例：9、-5）をサポート
   timezone: "Asia/Shanghai"
@@ -641,15 +645,16 @@ routes:
       - path
 ```
 
-### シナリオ 4：組み込み Ping エンドポイントによる遅延測定
+### シナリオ 4：Ping エンドポイントによる遅延測定
 
 ```bash
-# タイムスタンプ付きリクエストを送信
-curl -X POST http://127.0.0.1:9080/ping \
-  -H "X-Timestamp-Ms: $(date +%s%3N)"
+# タイムスタンプパラメータ付き GET リクエストを送信
+curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# 戻り値の例: {"pong": 3}  （単位: ミリ秒）
+# 戻り値の例: {"pong": 3, "ip": "127.0.0.1"}  （単位: ミリ秒）
 ```
+
+`/ping` ルートは NATS 経由で `ApiNatsBridgeTemplate` マイクロサービスに転送され、遅延を計算してクライアント IP を返します。
 
 ### シナリオ 5：NATS 通信の暗号化
 
@@ -717,10 +722,10 @@ type BridgeResponse struct {
 
 ## ローカルサービス環境
 
-プロジェクトには完全なローカルテスト環境（`test/` ディレクトリ）が含まれています：
+プロジェクトには完全なローカルテスト環境（`test/` ディレクトリ）とテンプレートマイクロサービス（`ApiNatsBridgeTemplate/`）が含まれています：
 
 ```bash
-# Windows でワンクリック起動（NATS Server、Mock マイクロサービス、ApiNatsBridge を起動）
+# Windows でワンクリック起動（NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate を起動）
 serve.bat
 ```
 
@@ -732,33 +737,26 @@ serve_stop.bat
 起動手順：
 
 1. ローカル NATS サーバーを起動（`test/nats-server/`）
-2. Mock マイクロサービスを起動（`test/mock-microservice/`）
-3. ApiNatsBridge メインプログラムを起動
+2. ApiNatsBridge メインプログラムを起動
+3. ApiNatsBridgeTemplate マイクロサービスを起動（`ApiNatsBridgeTemplate/`）
 
-起動後、HTTP テストスクリプト（`test/ping.bat`、`test/test.bat`、`test/test_form.bat`）を実行できます。
-
-### Mock マイクロサービスのコマンドラインパラメータ
-
-Mock マイクロサービス（`test/mock-microservice/`）は以下の起動パラメータをサポートします：
-
-| パラメータ           | 説明                                                    |
-| -------------- | ------------------------------------------------------- |
-| `-c <パス>`    | YAML 設定ファイルパスを指定（ApiNatsBridge と同様）               |
-| `--log <パス>` | ログを指定ファイルに書き込み（コンソールへの通常出力も継続）                 |
-| `--noout`      | コンソールログ出力を禁止（通常 `--log` と併用）            |
-
-起動例：
+起動後、HTTP テストスクリプト（`test/ping.bat`）を実行できます：
 
 ```bash
-# 通常起動
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml
-
-# ログをファイルに書き込み
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log
-
-# ログをファイルにのみ書き込み、コンソールには出力しない
-go run ./test/mock-microservice/ -c test/ApiNatsBridgeConfig.yaml --log mock_service.log --noout
+# ping リクエストを送信（ApiNatsBridgeTemplate が {pong, ip} を返す）
+curl "http://127.0.0.1:9080/ping?timestamp=0"
 ```
+
+### ApiNatsBridgeTemplate
+
+テンプレートマイクロサービスは `ping_req` NATS サブジェクトを購読し、`timestamp` パラメータを読み取り、`{"pong": <遅延ミリ秒>, "ip": "<クライアント IP>"}` を返します。
+
+```bash
+# デフォルト設定で起動
+go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml
+```
+
+詳細は `ApiNatsBridgeTemplate/README.md` を参照してください。
 
 ## 依存関係
 

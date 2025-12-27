@@ -62,5 +62,6 @@
   "http_detail_key_length": "key=%s length %d exceeds limit %d",
   "http_detail_value_length": "key=%s value length %d exceeds limit %d",
   "cli_flag_config": "yaml/config file",
-  "cli_flag_verbose": "verbose: log full request data"
+  "cli_flag_verbose": "verbose: log full request data",
+  "cli_flag_output": "output all logs to specified file"
 }

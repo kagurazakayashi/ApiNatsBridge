@@ -9,24 +9,32 @@ ECHO ============================================
 ECHO.
 ECHO   This script will start:
 ECHO     (1) NATS Server
-ECHO     (2) Mock Microservice
-ECHO     (3) ApiNatsBridge Main
+ECHO     (2) ApiNatsBridge
+ECHO     (3) ApiNatsBridgeTemplate
 ECHO.
 ECHO   Close each window manually after use.
 ECHO ============================================
 ECHO.
 
 ECHO *** Starting NATS Server ***
-START "NATS_Server" /D "test\nats-server\" nats-server.exe -c nats-server.conf
+CD test\nats-server
+START "NATS_Server" nats-server.exe -c nats-server.conf
+CD ..\..
 TIMEOUT /T 3 /NOBREAK >NUL
 
-ECHO *** Starting ApiNatsBridgeTemplate ***
-START "ApiNatsBridgeTemplate" go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml --log logs/ApiNatsBridgeTemplate.log
+ECHO *** Starting ApiNatsBridge ***
+START "ApiNatsBridge" go run . -c test/ApiNatsBridgeConfig.yaml
 TIMEOUT /T 5 /NOBREAK >NUL
 
-ECHO *** Starting ApiNatsBridge ***
-START "ApiNatsBridge" go run . -c test\ApiNatsBridgeConfig.yaml
+ECHO *** Starting ApiNatsBridgeTemplate ***
+CD ApiNatsBridgeTemplate
+START "ApiNatsBridgeTemplate" go run . -c config.yaml -o ../logs/ApiNatsBridgeTemplate.log
+CD ..
 TIMEOUT /T 5 /NOBREAK >NUL
+
+ECHO *** Sending test ping ***
+powershell -NoProfile -Command "$VerbosePreference='Continue'; Invoke-RestMethod -Verbose ('http://127.0.0.1:9080/ping?timestamp=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+ECHO.
 
 ECHO ============================================
 ECHO   All services started.

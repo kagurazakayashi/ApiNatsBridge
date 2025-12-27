@@ -62,5 +62,6 @@
   "http_detail_key_length": "key=%s length %d exceeds limit %d",
   "http_detail_value_length": "key=%s value length %d exceeds limit %d",
   "cli_flag_config": "yaml 設定檔路徑",
-  "cli_flag_verbose": "詳細模式：記錄完整請求資料"
+  "cli_flag_verbose": "詳細模式：記錄完整請求資料",
+  "cli_flag_output": "將所有日誌輸出到指定檔案"
 }

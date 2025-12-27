@@ -62,5 +62,6 @@
   "http_detail_key_length": "key=%s length %d exceeds limit %d",
   "http_detail_value_length": "key=%s value length %d exceeds limit %d",
   "cli_flag_config": "yaml 配置文件路径",
-  "cli_flag_verbose": "详细模式：记录完整请求数据"
+  "cli_flag_verbose": "详细模式：记录完整请求数据",
+  "cli_flag_output": "将所有日志输出到指定文件"
 }
