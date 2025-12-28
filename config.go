@@ -1,3 +1,7 @@
+// Package main 提供設定檔解析與 CLI 參數處理相關的型別定義與函式。
+//
+// 此檔案定義 ApiNatsBridge 使用的全部設定結構，包括 HTTP 伺服器、
+// NATS 用戶端、橋接層、路由規則與欄位長度限制，並提供設定檔載入與逾時計算等輔助方法。
 package main
 
 import (

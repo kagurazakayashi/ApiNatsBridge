@@ -377,6 +377,15 @@ bridge:
     body:
       max_length: 1048576 # 請求主體最大位元組長度（1MB）
 
+  # 全域回應欄位長度限制（結構同 limits，可被路由層級覆蓋）
+  response_limits:
+    body:
+      max_length: 1048576 # 回應主體最大位元組長度（1MB）
+    headers:
+      max_count: 64 # 回應標頭最大數量
+      max_key_length: 256 # 回應標頭名稱最大位元組長度
+      max_value_length: 4096 # 回應標頭值最大位元組長度
+
 # --- 路由轉送規則 ---
 routes:
   - path: "/api/user"
@@ -739,11 +748,14 @@ serve_stop.bat
 2. 啟動 ApiNatsBridge 主程式
 3. 啟動 ApiNatsBridgeTemplate 微服務（`ApiNatsBridgeTemplate/`）
 
-啟動後可執行 HTTP 測試指令碼（`test/ping.bat`）：
+啟動後 `serve.bat` 會在最後自動送出測試請求，您也可以手動送出：
 
 ```bash
 # 傳送 ping 請求（ApiNatsBridgeTemplate 回傳 {pong, ip}）
 curl "http://127.0.0.1:9080/ping?timestamp=0"
+
+# Windows PowerShell
+Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
 ```
 
 ### ApiNatsBridgeTemplate

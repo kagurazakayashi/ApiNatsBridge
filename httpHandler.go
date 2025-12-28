@@ -1,3 +1,8 @@
+// Package main 提供 HTTP 到 NATS 的橋接請求處理邏輯。
+//
+// 此檔案定義 BridgeHandler 及其核心處理流程，
+// 包含路由匹配、HTTP 方法驗證、Content-Type 驗證、
+// JSON Schema 與欄位長度限制驗證，以及 NATS 請求和回應的轉發轉換。
 package main
 
 import (
@@ -525,7 +530,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 
 		// 執行請求欄位長度與數量限制檢查。
 		if effectiveLimits != nil {
-			if resp := h.validateLimits(req, effectiveLimits); resp != nil {
+			if resp := h.validateLimits(req, effectiveLimits, clientIP); resp != nil {
 				return resp
 			}
 		}
@@ -576,9 +581,9 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			// 將表單 map 序列化為 JSON，讓下游微服務接收一致格式。
 			jsonBody, jsonErr := json.Marshal(formMap)
 			if jsonErr != nil {
-			return nyaapiserver.JSONResponse(500, map[string]string{
-				"error": lHTTP.HttpInternalErrorMarshalForm(),
-			})
+				return nyaapiserver.JSONResponse(500, map[string]string{
+					"error": lHTTP.HttpInternalErrorMarshalForm(),
+				})
 			}
 			req.Body = jsonBody
 
@@ -588,22 +593,29 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 
 		// 非表單請求若設定了 Schema，則將 body 視為 JSON 並進行驗證。
 		if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema && len(req.Body) > 0 {
-		var bodyJSON interface{}
-		if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
-			return h.errResp(400, lHTTP.HttpInvalidJsonBody(), err.Error(), clientIP)
-		}
-		if err := schema.Validate(bodyJSON); err != nil {
-			if verbose {
-				logBridge(lLog.LogSchemaValidationFailedVerbose(), req.Path, err)
-			} else {
-				logBridge(lLog.LogSchemaValidationFailed(), req.Path)
+			var bodyJSON interface{}
+			if err := json.Unmarshal(req.Body, &bodyJSON); err != nil {
+				return h.errResp(400, lHTTP.HttpInvalidJsonBody(), err.Error(), clientIP)
 			}
-			return h.errResp(400, lHTTP.HttpSchemaValidationFailed(), err.Error(), clientIP)
+			if err := schema.Validate(bodyJSON); err != nil {
+				if verbose {
+					logBridge(lLog.LogSchemaValidationFailedVerbose(), req.Path, err)
+				} else {
+					logBridge(lLog.LogSchemaValidationFailed(), req.Path)
+				}
+				return h.errResp(400, lHTTP.HttpSchemaValidationFailed(), err.Error(), clientIP)
+			}
 		}
-	}
 
 		// 所有檢查通過後，將請求送往對應 NATS Subject。
 		return h.forwardToNats(req, natsSubject, clientIP)
+	}
+
+	// 未命中設定路由，先檢查是否違反全域限制（path、body、headers 等）。
+	if h.limits != nil {
+		if resp := h.validateLimits(req, h.limits, clientIP); resp != nil {
+			return resp
+		}
 	}
 
 	// 未命中設定路由，回傳 404。
@@ -672,38 +684,38 @@ func mergeLimitRule(base, overlay *LimitRule) *LimitRule {
 // validateLimits 會根據 LimitRule 檢查 HTTP 請求各欄位長度與數量。
 //
 // 檢查範圍包含 path、body、headers、cookies 與 params。
-// 若任一欄位超出限制，會回傳 400 JSON 錯誤回應；全部通過則回傳 nil。
-func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRule) *nyaapiserver.HTTPResponse {
+// 若任一欄位超出限制，會透過 errResp 回傳 400 錯誤，
+// 僅白名單 IP 能取得詳細限制資訊，非白名單 IP 僅收到通用錯誤訊息。
+//
+// 參數：
+//   - req：HTTP 請求。
+//   - r：限制規則。
+//   - clientIP：用戶端 IP，用於判斷是否可回傳錯誤詳細資訊。
+func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRule, clientIP string) *nyaapiserver.HTTPResponse {
 	// 檢查請求路徑長度是否超過限制。
 	if r.Path.MaxLength > 0 && len(req.Path) > r.Path.MaxLength {
-		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error": lHTTP.HttpPathTooLong(),
-			"field": "path",
-			"limit": r.Path.MaxLength,
-		})
+		return h.errResp(400, lHTTP.HttpPathTooLong(),
+			fmt.Sprintf("path length %d exceeds limit %d", len(req.Path), r.Path.MaxLength), clientIP)
 	}
 
 	// 檢查請求本文長度是否超過限制。
 	if r.Body.MaxLength > 0 && len(req.Body) > r.Body.MaxLength {
-		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error": lHTTP.HttpBodyTooLong(),
-			"field": "body",
-			"limit": r.Body.MaxLength,
-		})
+		return h.errResp(400, lHTTP.HttpBodyTooLong(),
+			fmt.Sprintf(lHTTP.HttpDetailBodyLength(), len(req.Body), r.Body.MaxLength), clientIP)
 	}
 
 	// 檢查 headers 的數量、key 長度與 value 長度。
-	if resp := h.validateMapLimit(req.Headers, r.Headers, "headers"); resp != nil {
+	if resp := h.validateMapLimit(req.Headers, r.Headers, "headers", clientIP); resp != nil {
 		return resp
 	}
 
 	// 檢查 cookies 的數量、key 長度與 value 長度。
-	if resp := h.validateMapLimit(req.Cookies, r.Cookies, "cookies"); resp != nil {
+	if resp := h.validateMapLimit(req.Cookies, r.Cookies, "cookies", clientIP); resp != nil {
 		return resp
 	}
 
 	// 檢查 params 的數量、key 長度與 value 長度。
-	if resp := h.validateMapLimit(req.Params, r.Params, "params"); resp != nil {
+	if resp := h.validateMapLimit(req.Params, r.Params, "params", clientIP); resp != nil {
 		return resp
 	}
 
@@ -714,9 +726,15 @@ func (h *BridgeHandler) validateLimits(req *nyaapiserver.HTTPRequest, r *LimitRu
 // validateMapLimit 會檢查 map 型欄位的項目數量、鍵長度與值長度。
 //
 // 此函式用於 headers、cookies 與 params 等 map[string]string 欄位。
-// 若未設定任何限制，會直接回傳 nil；若違反限制，會回傳 400 JSON 錯誤回應。
-// field 參數會被寫入錯誤回應中，用於指出是哪一類欄位觸發限制。
-func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule, field string) *nyaapiserver.HTTPResponse {
+// 若未設定任何限制，會直接回傳 nil；若違反限制，會透過 errResp 回傳錯誤，
+// 僅白名單 IP 能取得詳細限制資訊。
+//
+// 參數：
+//   - m：要檢查的 map。
+//   - rule：限制規則。
+//   - field：欄位名稱（"headers"、"cookies" 或 "params"）。
+//   - clientIP：用戶端 IP，用於判斷是否可回傳錯誤詳細資訊。
+func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule, field string, clientIP string) *nyaapiserver.HTTPResponse {
 	// 若此類 map 欄位沒有任何限制，直接略過。
 	if rule.MaxCount <= 0 && rule.MaxKeyLen <= 0 && rule.MaxValueLen <= 0 {
 		return nil
@@ -724,33 +742,19 @@ func (h *BridgeHandler) validateMapLimit(m map[string]string, rule MapLimitRule,
 
 	// 檢查 map 項目數是否超過限制。
 	if rule.MaxCount > 0 && len(m) > rule.MaxCount {
-		return nyaapiserver.JSONResponse(400, map[string]interface{}{
-			"error":  lHTTP.HttpTooManyEntries(),
-			"field":  field,
-			"limit":  rule.MaxCount,
-			"actual": len(m),
-		})
+		return h.errResp(400, lHTTP.HttpTooManyEntries(),
+			fmt.Sprintf("field=%s: %s", field, fmt.Sprintf(lHTTP.HttpDetailCount(), len(m), rule.MaxCount)), clientIP)
 	}
 
 	// 逐一檢查每個 key 與 value 的長度。
 	for k, v := range m {
 		if rule.MaxKeyLen > 0 && len(k) > rule.MaxKeyLen {
-			return nyaapiserver.JSONResponse(400, map[string]interface{}{
-				"error":  lHTTP.HttpKeyTooLong(),
-				"field":  field,
-				"key":    k,
-				"limit":  rule.MaxKeyLen,
-				"actual": len(k),
-			})
+			return h.errResp(400, lHTTP.HttpKeyTooLong(),
+				fmt.Sprintf("field=%s: %s", field, fmt.Sprintf(lHTTP.HttpDetailKeyLength(), k, len(k), rule.MaxKeyLen)), clientIP)
 		}
 		if rule.MaxValueLen > 0 && len(v) > rule.MaxValueLen {
-			return nyaapiserver.JSONResponse(400, map[string]interface{}{
-				"error":  lHTTP.HttpValueTooLong(),
-				"field":  field,
-				"key":    k,
-				"limit":  rule.MaxValueLen,
-				"actual": len(v),
-			})
+			return h.errResp(400, lHTTP.HttpValueTooLong(),
+				fmt.Sprintf("field=%s: %s", field, fmt.Sprintf(lHTTP.HttpDetailValueLength(), k, len(v), rule.MaxValueLen)), clientIP)
 		}
 	}
 

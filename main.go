@@ -1,5 +1,7 @@
 //go:generate go-winres make
 
+// Package main 是 ApiNatsBridge 的進入點，負責載入設定、初始化日誌、
+// 建立 NATS 用戶端與 HTTP API 伺服器，並在收到系統中斷或終止訊號時執行優雅關閉流程。
 package main
 
 import (

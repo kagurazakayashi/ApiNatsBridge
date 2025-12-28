@@ -377,6 +377,15 @@ bridge:
     body:
       max_length: 1048576 # Maximum request body byte length (1MB)
 
+  # Global response field length limits (same structure as limits, can be overridden at route level)
+  response_limits:
+    body:
+      max_length: 1048576 # Maximum response body byte length (1MB)
+    headers:
+      max_count: 64 # Maximum number of response headers
+      max_key_length: 256 # Maximum response header name byte length
+      max_value_length: 4096 # Maximum response header value byte length
+
 # --- Route Forwarding Rules ---
 routes:
   - path: "/api/user"
@@ -761,11 +770,14 @@ Startup process:
 2. Start the ApiNatsBridge main program
 3. Start the ApiNatsBridgeTemplate microservice (`ApiNatsBridgeTemplate/`)
 
-After startup, you can run the HTTP test script (`test/ping.bat`)：
+After startup, `serve.bat` will automatically send a test request. You can also send one manually:
 
 ```bash
 # Send a ping request (ApiNatsBridgeTemplate responds with {pong, ip})
-curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
+curl "http://127.0.0.1:9080/ping?timestamp=0"
+
+# Windows PowerShell
+Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
 ```
 
 ### ApiNatsBridgeTemplate

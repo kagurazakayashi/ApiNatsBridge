@@ -378,6 +378,15 @@ bridge:
     body:
       max_length: 1048576 # リクエストボディの最大バイト長（1MB）
 
+  # グローバルレスポンスフィールド長制限（limits と同じ構造、ルートレベルで上書き可能）
+  response_limits:
+    body:
+      max_length: 1048576 # レスポンスボディ最大バイト長（1MB）
+    headers:
+      max_count: 64 # レスポンスヘッダー最大数
+      max_key_length: 256 # レスポンスヘッダー名最大バイト長
+      max_value_length: 4096 # レスポンスヘッダー値最大バイト長
+
 # --- ルーティング転送ルール ---
 routes:
   - path: "/api/user"
@@ -740,11 +749,14 @@ serve_stop.bat
 2. ApiNatsBridge メインプログラムを起動
 3. ApiNatsBridgeTemplate マイクロサービスを起動（`ApiNatsBridgeTemplate/`）
 
-起動後、HTTP テストスクリプト（`test/ping.bat`）を実行できます：
+起動後、`serve.bat` が最後に自動でテストリクエストを送信します。手動でも送信できます：
 
 ```bash
 # ping リクエストを送信（ApiNatsBridgeTemplate が {pong, ip} を返す）
 curl "http://127.0.0.1:9080/ping?timestamp=0"
+
+# Windows PowerShell
+Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
 ```
 
 ### ApiNatsBridgeTemplate

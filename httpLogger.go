@@ -1,3 +1,7 @@
+// Package main 提供 HTTP 伺服器的即時日誌輸出與統計資訊記錄。
+//
+// 此檔案定義 httpLogger 函式，作為 HTTP 伺服器模組的日誌回呼，
+// 在每次請求處理時附加輸出目前的服務執行統計資訊。
 package main
 
 import (
