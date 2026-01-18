@@ -496,7 +496,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 	// 解析實際用戶端 IP，後續會用於轉發、錯誤詳細資訊判斷與日誌。
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
 	if clientIP == "" {
-		logBridge(lLog.LogResolveIpFailed())
+		logBridge("%s", lLog.LogResolveIpFailed())
 		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte(lHTTP.HttpBadRequestResolveIp())}
 	}
 

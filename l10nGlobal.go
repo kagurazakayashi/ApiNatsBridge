@@ -1,5 +1,3 @@
-//go:generate .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
-
 // Package main 提供多國語言（l10n）初始化與全域語言實例管理。
 //
 // 此檔案定義三個全域語言實例變數（lLog、lHTTP、lCLI），

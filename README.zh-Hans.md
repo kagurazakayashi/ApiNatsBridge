@@ -122,14 +122,24 @@ git submodule update --init
 
 ### 编译 go-gen-l10n 工具
 
-子模块 `libNyaruko_Go` 中包含本地化代码生成工具 `go-gen-l10n`。在项目根目录下编译，生成到根目录：
+子模块 `libNyaruko_Go` 中包含本地化代码生成工具 `go-gen-l10n`。进入其目录，生成资源并编译：
 
 ```bash
+# 进入子模块目录
+cd libNyaruko_Go/go-gen-l10n
+
+# 生成 Windows 资源（如适用），然后编译
+go generate .
+go build .
+
+# 将二进制复制到项目根目录（以便 go generate ./l10nGlobal.go 能找到它）
 # Linux / macOS
-go build -o go-gen-l10n ./libNyaruko_Go/go-gen-l10n
+cd ../..
+cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
 
 # Windows
-go build -o go-gen-l10n.exe ./libNyaruko_Go\go-gen-l10n
+cd ..\..
+copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
 编译后会在项目根目录生成 `go-gen-l10n`（或 `go-gen-l10n.exe`），修改 `l10n/app_*.arb` 语言文件后执行以下命令重新生成代码：
@@ -149,7 +159,13 @@ go generate ./l10nGlobal.go
 
 ### Windows 可执行文件图标嵌入
 
-生成资源文件（`.syso`），之后 `go build` 会自动链接：
+首先安装 `go-winres` 工具：
+
+```bash
+go install github.com/tc-hib/go-winres@latest
+```
+
+然后生成资源文件（`.syso`），之后 `go build` 会自动链接：
 
 ```bash
 # 通过 go generate 自动调用 go-winres（推荐）
@@ -161,6 +177,7 @@ go-winres make
 
 > 资源配置文件位于 `winres/winres.json`，图标源文件位于 `ico/icon.png`。
 > `.syso` 文件已在 `.gitignore` 中被忽略，每次构建前需重新生成。
+> 此步骤为可选——`go run .` 无需 `.syso` 文件也可正常运行。
 
 ### 本平台编译
 
@@ -217,6 +234,28 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 ```
 
 > **提示：** 在 Windows PowerShell 下设置环境变量使用 `$env:GOOS="linux"; $env:GOARCH="amd64"` 后再执行 `go build`。
+
+### 批量多平台编译
+
+使用提供的编译脚本一键编译所有支持的平台：
+
+**Windows：**
+
+```bat
+build.bat
+```
+
+**Linux / macOS：**
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+> **注意：** 如果需要输出 HTML 格式的自述文件，请先安装 Python `markdown` 包：
+> ```bash
+> pip install markdown
+> ```
 
 ## 使用方法
 
@@ -733,14 +772,21 @@ type BridgeResponse struct {
 项目包含完整的本地测试环境（位于 `test/` 目录）及模板微服务（`ApiNatsBridgeTemplate/`）：
 
 ```bash
-# Windows 下一键启动（启动 NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate）
+# Windows — 一键启动（启动 NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate）
 serve.bat
+
+# Linux / macOS — 一键启动
+chmod +x serve.sh
+./serve.sh
 ```
 
 ```bash
 # 一键停止所有服务
-serve_stop.bat
+serve_stop.bat   # Windows
+./serve_stop.sh  # Linux / macOS
 ```
+
+> **警告：** serve 系列脚本使用示例配置文件的默认端口。与已在运行的服务会产生冲突（NATS 端口 4222、HTTP 端口 9080）。请先停止已有服务。
 
 启动流程：
 

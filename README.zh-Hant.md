@@ -122,14 +122,24 @@ git submodule update --init
 
 ### 編譯 go-gen-l10n 工具
 
-子模組 `libNyaruko_Go` 中包含在地化程式碼產生工具 `go-gen-l10n`。在專案根目錄下編譯，產生到根目錄：
+子模組 `libNyaruko_Go` 中包含在地化程式碼產生工具 `go-gen-l10n`。進入其目錄，產生資源並編譯：
 
 ```bash
+# 進入子模組目錄
+cd libNyaruko_Go/go-gen-l10n
+
+# 產生 Windows 資源（如適用），然後編譯
+go generate .
+go build .
+
+# 將執行檔複製到專案根目錄（以便 go generate ./l10nGlobal.go 能找到它）
 # Linux / macOS
-go build -o go-gen-l10n ./libNyaruko_Go/go-gen-l10n
+cd ../..
+cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
 
 # Windows
-go build -o go-gen-l10n.exe ./libNyaruko_Go\go-gen-l10n
+cd ..\..
+copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
 編譯後會在專案根目錄產生 `go-gen-l10n`（或 `go-gen-l10n.exe`），修改 `l10n/app_*.arb` 語言檔案後執行以下命令重新產生程式碼：
@@ -149,7 +159,13 @@ go generate ./l10nGlobal.go
 
 ### Windows 可執行檔圖示嵌入
 
-產生資源檔案（`.syso`），之後 `go build` 會自動連結：
+首先安裝 `go-winres` 工具：
+
+```bash
+go install github.com/tc-hib/go-winres@latest
+```
+
+然後產生資源檔案（`.syso`），之後 `go build` 會自動連結：
 
 ```bash
 # 透過 go generate 自動呼叫 go-winres（建議）
@@ -161,6 +177,7 @@ go-winres make
 
 > 資源設定檔案位於 `winres/winres.json`，圖示原始檔案位於 `ico/icon.png`。
 > `.syso` 檔案已在 `.gitignore` 中被忽略，每次建構前需重新產生。
+> 此步驟為可選——`go run .` 無需 `.syso` 檔案也可正常執行。
 
 ### 本平台編譯
 
@@ -217,6 +234,28 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 ```
 
 > **提示：** 在 Windows PowerShell 下設定環境變數使用 `$env:GOOS="linux"; $env:GOARCH="amd64"` 後再執行 `go build`。
+
+### 批次多平台編譯
+
+使用提供的編譯腳本一次編譯所有支援的平台：
+
+**Windows：**
+
+```bat
+build.bat
+```
+
+**Linux / macOS：**
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+> **注意：** 如果需要輸出 HTML 格式的自述檔案，請先安裝 Python `markdown` 套件：
+> ```bash
+> pip install markdown
+> ```
 
 ## 使用方法
 
@@ -733,14 +772,21 @@ type BridgeResponse struct {
 專案包含完整的本地測試環境（位於 `test/` 目錄）及範本微服務（`ApiNatsBridgeTemplate/`）：
 
 ```bash
-# Windows 下一鍵啟動（啟動 NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate）
+# Windows — 一鍵啟動（啟動 NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate）
 serve.bat
+
+# Linux / macOS — 一鍵啟動
+chmod +x serve.sh
+./serve.sh
 ```
 
 ```bash
 # 一鍵停止所有服務
-serve_stop.bat
+serve_stop.bat   # Windows
+./serve_stop.sh  # Linux / macOS
 ```
+
+> **警告：** serve 系列指令碼使用範例設定檔的預設連接埠。與已執行的服務會產生衝突（NATS 連接埠 4222、HTTP 連接埠 9080）。請先停止既有服務。
 
 啟動流程：
 

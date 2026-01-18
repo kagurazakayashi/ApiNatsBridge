@@ -122,14 +122,24 @@ git submodule update --init
 
 ### go-gen-l10n ツールのビルド
 
-サブモジュール `libNyaruko_Go` にはローカライズコード生成ツール `go-gen-l10n` が含まれています。プロジェクトのルートディレクトリでビルドし、ルートディレクトリに生成します：
+サブモジュール `libNyaruko_Go` にはローカライズコード生成ツール `go-gen-l10n` が含まれています。そのディレクトリに入り、リソースを生成してビルドします：
 
 ```bash
+# サブモジュールのディレクトリに入る
+cd libNyaruko_Go/go-gen-l10n
+
+# Windows リソースを生成（該当する場合）、その後ビルド
+go generate .
+go build .
+
+# 実行ファイルをプロジェクトルートにコピー（go generate ./l10nGlobal.go が見つけられるように）
 # Linux / macOS
-go build -o go-gen-l10n ./libNyaruko_Go/go-gen-l10n
+cd ../..
+cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
 
 # Windows
-go build -o go-gen-l10n.exe ./libNyaruko_Go\go-gen-l10n
+cd ..\..
+copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
 ビルド後、プロジェクトのルートディレクトリに `go-gen-l10n`（または `go-gen-l10n.exe`）が生成されます。`l10n/app_*.arb` 言語ファイルを変更した後、以下のコマンドを実行してコードを再生成します：
@@ -150,7 +160,13 @@ go generate ./l10nGlobal.go
 
 ### Windows 実行可能ファイルのアイコン埋め込み
 
-リソースファイル（`.syso`）を生成すると、以降の `go build` で自動的にリンクされます：
+まず `go-winres` ツールをインストールします：
+
+```bash
+go install github.com/tc-hib/go-winres@latest
+```
+
+次にリソースファイル（`.syso`）を生成すると、以降の `go build` で自動的にリンクされます：
 
 ```bash
 # go generate で go-winres を自動呼び出し（推奨）
@@ -162,6 +178,7 @@ go-winres make
 
 > リソース設定ファイルは `winres/winres.json`、アイコンソースファイルは `ico/icon.png` にあります。
 > `.syso` ファイルは `.gitignore` で無視されているため、ビルド前に毎回再生成する必要があります。
+> この手順はオプションです——`go run .` は `.syso` ファイルなしでも正常に動作します。
 
 ### 現在のプラットフォーム向けビルド
 
@@ -218,6 +235,28 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 ```
 
 > **ヒント：** Windows PowerShell で環境変数を設定する場合は `$env:GOOS="linux"; $env:GOARCH="amd64"` を実行してから `go build` を実行します。
+
+### バッチマルチプラットフォームビルド
+
+提供されているビルドスクリプトを使用して、サポートされているすべてのプラットフォーム向けに一括コンパイルできます：
+
+**Windows：**
+
+```bat
+build.bat
+```
+
+**Linux / macOS：**
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+> **注意：** 出力に HTML 形式の README ファイルを含める場合は、Python の `markdown` パッケージを事前にインストールしてください：
+> ```bash
+> pip install markdown
+> ```
 
 ## 使用方法
 
@@ -734,14 +773,21 @@ type BridgeResponse struct {
 プロジェクトには完全なローカルテスト環境（`test/` ディレクトリ）とテンプレートマイクロサービス（`ApiNatsBridgeTemplate/`）が含まれています：
 
 ```bash
-# Windows でワンクリック起動（NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate を起動）
+# Windows — ワンクリック起動（NATS Server、ApiNatsBridge、ApiNatsBridgeTemplate を起動）
 serve.bat
+
+# Linux / macOS — ワンクリック起動
+chmod +x serve.sh
+./serve.sh
 ```
 
 ```bash
 # すべてのサービスをワンクリック停止
-serve_stop.bat
+serve_stop.bat   # Windows
+./serve_stop.sh  # Linux / macOS
 ```
+
+> **警告：** serve スクリプトはサンプル設定ファイルのデフォルトポートを使用します。既に実行中のサービスと競合します（NATS ポート 4222、HTTP ポート 9080）。既存のサービスを先に停止してください。
 
 起動手順：
 

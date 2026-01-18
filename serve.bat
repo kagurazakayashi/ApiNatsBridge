@@ -23,12 +23,17 @@ CD ..\..
 TIMEOUT /T 3 /NOBREAK >NUL
 
 ECHO *** Starting ApiNatsBridge ***
-START "ApiNatsBridge" go run . -c test/ApiNatsBridgeConfig.yaml
+go mod tidy
+go generate .
+go build -o ApiNatsBridge.exe -gcflags="all=-N -l" .
+START "ApiNatsBridge" ApiNatsBridge.exe -c test/ApiNatsBridgeConfig.yaml
 TIMEOUT /T 5 /NOBREAK >NUL
 
 ECHO *** Starting ApiNatsBridgeTemplate ***
 CD ApiNatsBridgeTemplate
-START "ApiNatsBridgeTemplate" go run . -c config.yaml -o ../logs/ApiNatsBridgeTemplate.log
+go mod tidy
+go build -o ApiNatsBridgeTemplate.exe -gcflags="all=-N -l" .
+START "ApiNatsBridgeTemplate" ApiNatsBridgeTemplate.exe -c config.yaml -o ../logs/ApiNatsBridgeTemplate.log
 CD ..
 TIMEOUT /T 5 /NOBREAK >NUL
 

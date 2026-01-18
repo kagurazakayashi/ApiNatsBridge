@@ -4,3 +4,9 @@
 [submodule "libNyaruko_Go"]
 	path = libNyaruko_Go
 	url = git@github.com:kagurazakayashi/libNyaruko_Go.git
+[submodule "go-build-all"]
+	path = go-build-all
+	url = https://github.com/MasaeProject/go-build-all.git
+[submodule "go-gen-l10n"]
+	path = go-gen-l10n
+	url = https://github.com/kagurazakayashi/go-gen-l10n.git

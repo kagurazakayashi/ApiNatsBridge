@@ -1,9 +1,15 @@
 *.syso
 *.log
 *.exe
+build*.py
 l10n/app_localizations*.go
 /AGENTS*
 nats-server/nats_data
+/bin
+ico/icon-hd.png
+*.pid
+.pid
+.pidfile
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,go,goland

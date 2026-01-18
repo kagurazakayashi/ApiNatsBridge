@@ -122,17 +122,27 @@ git submodule update --init
 
 ### Building the go-gen-l10n Tool
 
-The submodule `libNyaruko_Go` includes the localization code generation tool `go-gen-l10n`. Build it from the project root:
+The submodule `libNyaruko_Go` includes the localization code generation tool `go-gen-l10n`. Enter its directory, generate resources, and build:
 
 ```bash
+# Enter the submodule directory
+cd libNyaruko_Go/go-gen-l10n
+
+# Generate Windows resource (if applicable), then build
+go generate .
+go build .
+
+# Copy the binary to the project root (so go generate ./l10nGlobal.go can find it)
 # Linux / macOS
-go build -o go-gen-l10n ./libNyaruko_Go/go-gen-l10n
+cd ../..
+cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
 
 # Windows
-go build -o go-gen-l10n.exe ./libNyaruko_Go\go-gen-l10n
+cd ..\..
+copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
-After building, `go-gen-l10n` (or `go-gen-l10n.exe`) will be generated in the project root. After modifying `l10n/app_*.arb` language files, run the following command to regenerate code:
+After building, `go-gen-l10n` (or `go-gen-l10n.exe`) will be available in the project root. After modifying `l10n/app_*.arb` language files, run the following command to regenerate code:
 
 ```bash
 # Linux / macOS
@@ -149,7 +159,13 @@ go generate ./l10nGlobal.go
 
 ### Embedding an Icon in the Windows Executable
 
-Generate the resource file (`.syso`), which `go build` will automatically link:
+First, install the `go-winres` tool:
+
+```bash
+go install github.com/tc-hib/go-winres@latest
+```
+
+Then generate the resource file (`.syso`), which `go build` will automatically link:
 
 ```bash
 # Using go generate to invoke go-winres automatically (recommended)
@@ -161,6 +177,7 @@ go-winres make
 
 > The resource configuration file is located at `winres/winres.json`, and the icon source file is at `ico/icon.png`.
 > The `.syso` file is ignored in `.gitignore` and must be regenerated before each build.
+> This step is optional — `go run .` works without the `.syso` file.
 
 ### Building for the Current Platform
 
@@ -217,6 +234,28 @@ GOOS=freebsd GOARCH=amd64 go build -o ApiNatsBridge-freebsd-amd64 .
 ```
 
 > **Tip:** In Windows PowerShell, set environment variables using `$env:GOOS="linux"; $env:GOARCH="amd64"` before running `go build`.
+
+### Batch Multi-Platform Build
+
+Use the provided build scripts to compile for all supported platforms at once:
+
+**Windows:**
+
+```bat
+build.bat
+```
+
+**Linux / macOS:**
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+> **Note:** If you want the README files included in the output to be in HTML format, install the `markdown` Python package first:
+> ```bash
+> pip install markdown
+> ```
 
 ## Usage
 
@@ -755,9 +794,21 @@ If the microservice returns something other than valid `BridgeResponse` JSON, Ap
 The project includes a complete local testing environment (located in the `test/` directory) and a template microservice (`ApiNatsBridgeTemplate/`):
 
 ```bash
-# One-click startup on Windows (starts NATS Server, ApiNatsBridge, ApiNatsBridgeTemplate)
+# Windows — one-click start (starts NATS Server, ApiNatsBridge, ApiNatsBridgeTemplate)
 serve.bat
+
+# Linux / macOS — one-click start
+chmod +x serve.sh
+./serve.sh
 ```
+
+```bash
+# One-click stop of all services
+serve_stop.bat   # Windows
+./serve_stop.sh  # Linux / macOS
+```
+
+> **Warning:** The serve scripts use the default ports from the example configuration files. Running them will conflict with any services already listening on those ports (NATS port 4222, HTTP port 9080). Stop any existing services first.
 
 ```bash
 # One-click stop of all services
