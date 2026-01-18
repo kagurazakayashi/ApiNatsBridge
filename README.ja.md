@@ -699,7 +699,7 @@ routes:
 # タイムスタンプパラメータ付き GET リクエストを送信
 curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# 戻り値の例: {"pong": 3, "ip": "127.0.0.1"}  （単位: ミリ秒）
+# 戻り値の例: {"pong": 3, "ip": "127.0.0.1", "servertime": 1716000000042}  （単位: ミリ秒）
 ```
 
 `/ping` ルートは NATS 経由で `ApiNatsBridgeTemplate` マイクロサービスに転送され、遅延を計算してクライアント IP を返します。
@@ -798,7 +798,7 @@ serve_stop.bat   # Windows
 起動後、`serve.bat` が最後に自動でテストリクエストを送信します。手動でも送信できます：
 
 ```bash
-# ping リクエストを送信（ApiNatsBridgeTemplate が {pong, ip} を返す）
+# ping リクエストを送信（ApiNatsBridgeTemplate が {pong, ip, servertime} を返す）
 curl "http://127.0.0.1:9080/ping?timestamp=0"
 
 # Windows PowerShell
@@ -807,7 +807,7 @@ Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffse
 
 ### ApiNatsBridgeTemplate
 
-テンプレートマイクロサービスは `ping_req` NATS サブジェクトを購読し、`timestamp` パラメータを読み取り、`{"pong": <遅延ミリ秒>, "ip": "<クライアント IP>"}` を返します。
+テンプレートマイクロサービスは `ping_req` NATS サブジェクトを購読し、`timestamp` パラメータを読み取り、`{"pong": <遅延ミリ秒>, "ip": "<クライアント IP>", "servertime": <サーバータイムスタンプミリ秒>}` を返します。
 
 ```bash
 # デフォルト設定で起動

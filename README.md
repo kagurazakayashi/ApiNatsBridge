@@ -720,7 +720,7 @@ routes:
 # Send a GET request with a timestamp query parameter
 curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# Example response: {"pong": 3, "ip": "127.0.0.1"}  (unit: milliseconds)
+# Example response: {"pong": 3, "ip": "127.0.0.1", "servertime": 1716000000042}  (unit: milliseconds)
 ```
 
 The `/ping` route is forwarded via NATS to the `ApiNatsBridgeTemplate` microservice, which calculates the delay and returns the client IP.
@@ -824,7 +824,7 @@ Startup process:
 After startup, `serve.bat` will automatically send a test request. You can also send one manually:
 
 ```bash
-# Send a ping request (ApiNatsBridgeTemplate responds with {pong, ip})
+# Send a ping request (ApiNatsBridgeTemplate responds with {pong, ip, servertime})
 curl "http://127.0.0.1:9080/ping?timestamp=0"
 
 # Windows PowerShell
@@ -833,7 +833,7 @@ Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffse
 
 ### ApiNatsBridgeTemplate
 
-The template microservice subscribes to the `ping_req` NATS subject, reads the `timestamp` parameter, and returns `{"pong": <delay_ms>, "ip": "<client_ip>"}`.
+The template microservice subscribes to the `ping_req` NATS subject, reads the `timestamp` parameter, and returns `{"pong": <delay_ms>, "ip": "<client_ip>", "servertime": <server_timestamp_ms>}`.
 
 ```bash
 # Start with default config

@@ -165,7 +165,7 @@ routes:
           type: string # 欄位類型為字串
     response_limits: # 此路由專用的回應限制（覆蓋全域 response_limits）
       body:
-        max_length: 76 # 回應本文最大長度：{"pong":±9223372036854775808,"ip":"0000:0000:0000:0000:0000:0000:0000:0000"}
+        max_length: 109 # 回應本文最大長度：{"pong":±9223372036854775808,"ip":"0000:0000:0000:0000:0000:0000:0000:0000","servertime":9223372036854775807}
       headers:
         max_count: 1 # 僅允許 1 個回應標頭（Content-Type）
         max_key_length: 12 # "Content-Type" = 12 字元
@@ -176,8 +176,11 @@ routes:
       required: # 必要欄位清單
         - pong # 必須包含 pong 欄位
         - ip # 必須包含 ip 欄位
+        - servertime # 必須包含 servertime 欄位
       properties: # 屬性定義
         pong: # pong 欄位定義
           type: integer # 類型為整數（時間戳回應）
         ip: # ip 欄位定義
           type: string # 類型為字串（客戶端 IP 回顯）
+        servertime: # servertime 欄位定義
+          type: integer # 類型為整數（伺服器系統毫秒時間戳）

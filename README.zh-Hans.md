@@ -698,7 +698,7 @@ routes:
 # 发送带时间戳参数的 GET 请求
 curl "http://127.0.0.1:9080/ping?timestamp=$(date +%s%3N)"
 
-# 返回示例: {"pong": 3, "ip": "127.0.0.1"}  (单位: 毫秒)
+# 返回示例: {"pong": 3, "ip": "127.0.0.1", "servertime": 1716000000042}  (单位: 毫秒)
 ```
 
 `/ping` 路由通过 NATS 转发至 `ApiNatsBridgeTemplate` 微服务，由其计算延迟并返回客户端 IP。
@@ -797,7 +797,7 @@ serve_stop.bat   # Windows
 启动后 `serve.bat` 会在最后自动发送测试请求，您也可以手动发送：
 
 ```bash
-# 发送 ping 请求（ApiNatsBridgeTemplate 返回 {pong, ip}）
+# 发送 ping 请求（ApiNatsBridgeTemplate 返回 {pong, ip, servertime}）
 curl "http://127.0.0.1:9080/ping?timestamp=0"
 
 # Windows PowerShell
@@ -806,7 +806,7 @@ Invoke-RestMethod -Uri ("http://127.0.0.1:9080/ping?timestamp=" + [DateTimeOffse
 
 ### ApiNatsBridgeTemplate
 
-模板微服务订阅 `ping_req` NATS 主题，读取 `timestamp` 参数，返回 `{"pong": <延迟毫秒>, "ip": "<客户端 IP>"}`。
+模板微服务订阅 `ping_req` NATS 主题，读取 `timestamp` 参数，返回 `{"pong": <延迟毫秒>, "ip": "<客户端 IP>", "servertime": <服务器时间戳毫秒>}`。
 
 ```bash
 # 使用默认配置启动
