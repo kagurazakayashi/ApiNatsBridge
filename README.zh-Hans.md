@@ -44,17 +44,17 @@
 
 运行时日志输出使用以下前缀区分来源模块：
 
-| 前缀 | 来源文件 | 颜色 | 用途 |
-|------|----------|------|------|
-| `[MAIN]` | `logger.go` | Cyan | 主流程生命周期日志 |
-| `[NATS]` | `natsLogger.go` | Green | NATS 客户端连接与事件 |
-| `[BRIDGE]` | `logger.go` | Yellow | 桥接路由与转发日志 |
-| `[HTTP]` | `logger.go` | Blue | HTTP 请求日志行 |
-| `[HTTPSTAT]` | `logger.go` | Purple | HTTP 服务器运行时统计 |
-| `[MODULE]` | `logger.go` | Cyan | 通用模块日志 |
-| `[NATS][ERROR]` | `logger.go` | Red | NATS 连接错误 |
-| `[HTTP][ERROR]` | `logger.go` | Red | HTTP 服务器错误 |
-| `[MAIN][ERROR]` | `logger.go` | Red | 主流程致命错误 |
+| 前缀            | 来源文件            | 颜色   | 用途                  |
+| --------------- | ------------------- | ------ | --------------------- |
+| `[MAIN]`        | `src/logger.go`     | Cyan   | 主流程生命周期日志    |
+| `[NATS]`        | `src/natsLogger.go` | Green  | NATS 客户端连接与事件 |
+| `[BRIDGE]`      | `src/logger.go`     | Yellow | 桥接路由与转发日志    |
+| `[HTTP]`        | `src/logger.go`     | Blue   | HTTP 请求日志行       |
+| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP 服务器运行时统计 |
+| `[MODULE]`      | `src/logger.go`     | Cyan   | 通用模块日志          |
+| `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 连接错误         |
+| `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP 服务器错误       |
+| `[MAIN][ERROR]` | `src/logger.go`     | Red    | 主流程致命错误        |
 
 所有前缀均通过本地库 `libNyaruko_Go/nyalog` 的 `LogCC()` 函数输出。
 
@@ -96,10 +96,10 @@
 
 本项目包含以下 Git 子模块：
 
-| 子模块 | 路径 | 说明 |
-|--------|------|------|
-| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | 依赖库（`nyalog`、`nyanats`、`nyaapiserver` 模块） |
-| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服务模板项目 |
+| 子模块                                                                         | 路径                     | 说明                                               |
+| ------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------- |
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go)              | `libNyaruko_Go/`         | 依赖库（`nyalog`、`nyanats`、`nyaapiserver` 模块） |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服务模板项目                                     |
 
 克隆时一并拉取子模块：
 
@@ -132,7 +132,7 @@ cd libNyaruko_Go/go-gen-l10n
 go generate .
 go build .
 
-# 将二进制复制到项目根目录（以便 go generate ./l10nGlobal.go 能找到它）
+# 将二进制复制到项目根目录（以便 go generate ./src/l10nGlobal.go 能找到它）
 # Linux / macOS
 cd ../..
 cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
@@ -153,8 +153,9 @@ copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
 或使用 `go generate`：
+
 ```bash
-go generate ./l10nGlobal.go
+go generate ./src/l10nGlobal.go
 ```
 
 ### Windows 可执行文件图标嵌入
@@ -253,6 +254,7 @@ chmod +x build.sh
 ```
 
 > **注意：** 如果需要输出 HTML 格式的自述文件，请先安装 Python `markdown` 包：
+>
 > ```bash
 > pip install markdown
 > ```
@@ -491,94 +493,95 @@ routes:
 
 #### `bridge` — 桥接层配置
 
-| 配置项             | 类型     | 说明                         |
-| ------------------ | -------- | ---------------------------- |
-| `language`         | object   | 多国语言配置（详见下方）     |
-| `log`              | object   | 日志输出配置（详见下方）     |
+| 配置项             | 类型     | 说明                                                    |
+| ------------------ | -------- | ------------------------------------------------------- |
+| `language`         | object   | 多国语言配置（详见下方）                                |
+| `log`              | object   | 日志输出配置（详见下方）                                |
 | `timezone`         | string   | 时区，影响所有日志时间戳，如 `"Asia/Shanghai"` 或 `"8"` |
-| `cdnheader`        | []string | CDN 真实 IP 标头优先级列表   |
-| `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单 |
-| `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用 |
-| `limits`           | object   | 全局请求字段长度限制         |
-| `response_limits`  | object   | 全局回应字段长度限制（结构同 limits） |
+| `cdnheader`        | []string | CDN 真实 IP 标头优先级列表                              |
+| `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单                            |
+| `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用                            |
+| `limits`           | object   | 全局请求字段长度限制                                    |
+| `response_limits`  | object   | 全局回应字段长度限制（结构同 limits）                   |
 
 ##### `bridge.language` — 多国语言配置
 
-| 配置项 | 类型   | 默认值      | 说明                              |
-| ------ | ------ | ----------- | --------------------------------- |
-| `log`  | string | `"zh_Hant"` | 日志输出语言                      |
-| `http` | string | `"en"`      | HTTP 响应错误消息语言             |
-| `cli`  | string | `"zh_Hant"` | 命令行相关消息语言                |
+| 配置项 | 类型   | 默认值      | 说明                  |
+| ------ | ------ | ----------- | --------------------- |
+| `log`  | string | `"zh_Hant"` | 日志输出语言          |
+| `http` | string | `"en"`      | HTTP 响应错误消息语言 |
+| `cli`  | string | `"zh_Hant"` | 命令行相关消息语言    |
 
 > 支持的语言代码：`en`（英语）、`zh`（简体中文）、`zh_Hant`（繁体中文）、`ja`（日语）。
 >
 > **重要：** 语言文本的修改应在翻译源文件 `l10n/app_*.arb` 中进行，**不要**直接编辑 `l10n/app_localizations_*.go` 生成文件，它们会在重新生成时被覆盖。
 >
 > 修改 `.arb` 文件后需运行以下命令重新生成 Go 代码：
+>
 > ```bash
 > # Windows
 > .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
 >
 > # 或使用 go generate
-> go generate .\l10nGlobal.go
+> go generate .\src\l10nGlobal.go
 > ```
 >
 > #### 语言风格约定
 >
-> | 语言代码 | 语言 | 风格 |
-> |----------|------|------|
-> | `zh` | 简体中文 | 大陆风格（大陆简体） |
+> | 语言代码  | 语言     | 风格                 |
+> | --------- | -------- | -------------------- |
+> | `zh`      | 简体中文 | 大陆风格（大陆简体） |
 > | `zh_Hant` | 繁体中文 | 台湾风格（臺灣繁體） |
-> | `en` | 英语 | 标准 |
-> | `ja` | 日语 | 标准 |
+> | `en`      | 英语     | 标准                 |
+> | `ja`      | 日语     | 标准                 |
 >
 > #### ARB 文件
 >
-> | 文件 | 语言 |
-> |------|------|
-> | `l10n/app_zh.arb` | 简体中文（大陆） |
+> | 文件                   | 语言             |
+> | ---------------------- | ---------------- |
+> | `l10n/app_zh.arb`      | 简体中文（大陆） |
 > | `l10n/app_zh_Hant.arb` | 繁体中文（台湾） |
-> | `l10n/app_en.arb` | 英语 |
-> | `l10n/app_ja.arb` | 日语 |
+> | `l10n/app_en.arb`      | 英语             |
+> | `l10n/app_ja.arb`      | 日语             |
 
 ##### `bridge.log` — 日志输出配置
 
-| 配置项            | 类型   | 说明                                     |
-| ----------------- | ------ | ---------------------------------------- |
-| `stdout`          | bool   | 是否同时输出到控制台，`false` 则仅写文件 |
-| `debug`           | bool   | 是否启用调试等级日志，`false` 仅 Info+   |
-| `overwrite`       | bool   | 是否覆盖模式，`true` 则启动时清空现有日志文件，`false` 或不提供仅追加 |
-| `color`           | bool   | 是否彩色控制台输出，`true` 或不提供则彩色，`false` 则纯文字 |
-| `files`           | object | 各模块独立日志文件路径（详见下方）       |
+| 配置项      | 类型   | 说明                                                                  |
+| ----------- | ------ | --------------------------------------------------------------------- |
+| `stdout`    | bool   | 是否同时输出到控制台，`false` 则仅写文件                              |
+| `debug`     | bool   | 是否启用调试等级日志，`false` 仅 Info+                                |
+| `overwrite` | bool   | 是否覆盖模式，`true` 则启动时清空现有日志文件，`false` 或不提供仅追加 |
+| `color`     | bool   | 是否彩色控制台输出，`true` 或不提供则彩色，`false` 则纯文字           |
+| `files`     | object | 各模块独立日志文件路径（详见下方）                                    |
 
 ##### `bridge.log.files` — 模块日志文件路径
 
-| 配置项            | 类型   | 说明                         |
-| ----------------- | ------ | ---------------------------- |
-| `main`            | string | 主流程日志文件路径           |
-| `bridge`          | string | 桥接路由与转发日志文件路径   |
-| `http`            | string | HTTP 请求日志文件路径        |
-| `nats`            | string | NATS 客户端事件日志文件路径  |
-| `httpstat`        | string | HTTP 服务器运行统计日志文件路径 |
-| `module`          | string | 通用模块日志文件路径         |
+| 配置项     | 类型   | 说明                            |
+| ---------- | ------ | ------------------------------- |
+| `main`     | string | 主流程日志文件路径              |
+| `bridge`   | string | 桥接路由与转发日志文件路径      |
+| `http`     | string | HTTP 请求日志文件路径           |
+| `nats`     | string | NATS 客户端事件日志文件路径     |
+| `httpstat` | string | HTTP 服务器运行统计日志文件路径 |
+| `module`   | string | 通用模块日志文件路径            |
 
 > 日志文件路径为相对或绝对路径均可。目录不存在时会自动创建。
 > 路径留空或不填则该模块不写入文件。若 `stdout: false` 且所有文件路径均为空，则该模块无日志输出。
 
 #### `routes` — 路由规则
 
-| 配置项          | 类型     | 默认值         | 说明                         |
-| --------------- | -------- | -------------- | ---------------------------- |
-| `path`          | string   | （必填）       | HTTP 请求路径                |
-| `nats_subject`  | string   | （必填）       | 转发的 NATS Subject          |
-| `methods`       | []string | []（允许全部） | 允许的 HTTP 方法列表         |
-| `content_type`  | string   | ""（不校验）   | 要求的 Content-Type 前缀     |
-| `timeout`       | int      | 30             | NATS 响应超时（秒）          |
-| `return_fields` | []string | []（返回全部） | 转发给微服务的字段选择       |
-| `limits`              | object   | -              | 路由级别长度限制（覆盖全局）                 |
-| `schema_body`         | object   | -              | 请求体 JSON Schema 校验                      |
-| `response_limits`     | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
-| `response_schema_body`| object   | -              | 回应体 JSON Schema 校验（结构同 schema_body） |
+| 配置项                 | 类型     | 默认值         | 说明                                             |
+| ---------------------- | -------- | -------------- | ------------------------------------------------ |
+| `path`                 | string   | （必填）       | HTTP 请求路径                                    |
+| `nats_subject`         | string   | （必填）       | 转发的 NATS Subject                              |
+| `methods`              | []string | []（允许全部） | 允许的 HTTP 方法列表                             |
+| `content_type`         | string   | ""（不校验）   | 要求的 Content-Type 前缀                         |
+| `timeout`              | int      | 30             | NATS 响应超时（秒）                              |
+| `return_fields`        | []string | []（返回全部） | 转发给微服务的字段选择                           |
+| `limits`               | object   | -              | 路由级别长度限制（覆盖全局）                     |
+| `schema_body`          | object   | -              | 请求体 JSON Schema 校验                          |
+| `response_limits`      | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
+| `response_schema_body` | object   | -              | 回应体 JSON Schema 校验（结构同 schema_body）    |
 
 #### `return_fields` 可选值
 

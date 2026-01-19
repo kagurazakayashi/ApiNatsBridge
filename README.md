@@ -44,17 +44,17 @@ A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST reque
 
 Runtime log output uses the following prefixes to distinguish source modules:
 
-| Prefix | Source File | Color | Purpose |
-|------|----------|------|------|
-| `[MAIN]` | `logger.go` | Cyan | Main process lifecycle logs |
-| `[NATS]` | `natsLogger.go` | Green | NATS client connection and events |
-| `[BRIDGE]` | `logger.go` | Yellow | Bridge routing and forwarding logs |
-| `[HTTP]` | `logger.go` | Blue | HTTP request log lines |
-| `[HTTPSTAT]` | `logger.go` | Purple | HTTP server runtime statistics |
-| `[MODULE]` | `logger.go` | Cyan | Generic module logs |
-| `[NATS][ERROR]` | `logger.go` | Red | NATS connection errors |
-| `[HTTP][ERROR]` | `logger.go` | Red | HTTP server errors |
-| `[MAIN][ERROR]` | `logger.go` | Red | Fatal errors in the main process |
+| Prefix          | Source File         | Color  | Purpose                            |
+| --------------- | ------------------- | ------ | ---------------------------------- |
+| `[MAIN]`        | `src/logger.go`     | Cyan   | Main process lifecycle logs        |
+| `[NATS]`        | `src/natsLogger.go` | Green  | NATS client connection and events  |
+| `[BRIDGE]`      | `src/logger.go`     | Yellow | Bridge routing and forwarding logs |
+| `[HTTP]`        | `src/logger.go`     | Blue   | HTTP request log lines             |
+| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP server runtime statistics     |
+| `[MODULE]`      | `src/logger.go`     | Cyan   | Generic module logs                |
+| `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS connection errors             |
+| `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP server errors                 |
+| `[MAIN][ERROR]` | `src/logger.go`     | Red    | Fatal errors in the main process   |
 
 All prefixes are output via the `LogCC()` function from the local library `libNyaruko_Go/nyalog`.
 
@@ -96,10 +96,10 @@ All prefixes are output via the `LogCC()` function from the local library `libNy
 
 This project includes the following Git submodules:
 
-| Submodule | Path | Description |
-|--------|------|------|
-| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | Dependency libraries (`nyalog`, `nyanats`, `nyaapiserver` modules) |
-| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | Microservice template project |
+| Submodule                                                                      | Path                     | Description                                                        |
+| ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------ |
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go)              | `libNyaruko_Go/`         | Dependency libraries (`nyalog`, `nyanats`, `nyaapiserver` modules) |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | Microservice template project                                      |
 
 Clone with submodules:
 
@@ -132,14 +132,14 @@ cd libNyaruko_Go/go-gen-l10n
 go generate .
 go build .
 
-# Copy the binary to the project root (so go generate ./l10nGlobal.go can find it)
+# Copy the binary to the project root (so go generate ./src/l10nGlobal.go can find it)
 # Linux / macOS
 cd ../..
-cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
+cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .  # (so go generate ./src/l10nGlobal.go can find it)
 
 # Windows
 cd ..\..
-copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
+copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .  &rem ; (so go generate .\src\l10nGlobal.go can find it)
 ```
 
 After building, `go-gen-l10n` (or `go-gen-l10n.exe`) will be available in the project root. After modifying `l10n/app_*.arb` language files, run the following command to regenerate code:
@@ -153,8 +153,9 @@ After building, `go-gen-l10n` (or `go-gen-l10n.exe`) will be available in the pr
 ```
 
 Or use `go generate`:
+
 ```bash
-go generate ./l10nGlobal.go
+go generate ./src/l10nGlobal.go
 ```
 
 ### Embedding an Icon in the Windows Executable
@@ -253,6 +254,7 @@ chmod +x build.sh
 ```
 
 > **Note:** If you want the README files included in the output to be in HTML format, install the `markdown` Python package first:
+>
 > ```bash
 > pip install markdown
 > ```
@@ -261,11 +263,11 @@ chmod +x build.sh
 
 ### Command-Line Arguments
 
-| Argument | Description |
-| ----------- | -------------------------------------------------------------------------- |
+| Argument    | Description                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `-c <path>` | Specifies the YAML configuration file path. If not specified, defaults to a `.yaml` file with the same name as the executable |
-| `-v`        | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.) |
-| `-o <path>` | Outputs all logs to the specified file (in addition to console and per-module log files) |
+| `-v`        | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.)           |
+| `-o <path>` | Outputs all logs to the specified file (in addition to console and per-module log files)                                      |
 
 ### Startup Examples
 
@@ -460,95 +462,96 @@ routes:
 
 #### `httpapiserver_config` — HTTP Server Configuration
 
-| Item | Type | Description |
-| --------------------------------- | ------ | -------------------------------------- |
-| `httpapiserver_host` | string | Server listen address; `0.0.0.0` listens on all interfaces |
-| `httpapiserver_port` | int | Listen port |
-| `httpapiserver_tls_cert_file` | string | TLS certificate file path; leave empty for HTTP |
-| `httpapiserver_tls_key_file` | string | TLS private key file path; leave empty for HTTP |
-| `httpapiserver_read_timeout` | int | Read request timeout (seconds) |
-| `httpapiserver_write_timeout` | int | Write response timeout (seconds) |
-| `httpapiserver_idle_timeout` | int | Idle connection timeout (seconds) |
-| `httpapiserver_enable_rate_limit` | bool | Whether to enable IP rate limiting |
-| `httpapiserver_limit_requests` | int | Maximum number of requests per time window |
-| `httpapiserver_limit_window` | int | Rate limit time window (seconds) |
-| `httpapiserver_block_duration` | int | Ban duration after exceeding the limit (seconds) |
+| Item                              | Type   | Description                                                |
+| --------------------------------- | ------ | ---------------------------------------------------------- |
+| `httpapiserver_host`              | string | Server listen address; `0.0.0.0` listens on all interfaces |
+| `httpapiserver_port`              | int    | Listen port                                                |
+| `httpapiserver_tls_cert_file`     | string | TLS certificate file path; leave empty for HTTP            |
+| `httpapiserver_tls_key_file`      | string | TLS private key file path; leave empty for HTTP            |
+| `httpapiserver_read_timeout`      | int    | Read request timeout (seconds)                             |
+| `httpapiserver_write_timeout`     | int    | Write response timeout (seconds)                           |
+| `httpapiserver_idle_timeout`      | int    | Idle connection timeout (seconds)                          |
+| `httpapiserver_enable_rate_limit` | bool   | Whether to enable IP rate limiting                         |
+| `httpapiserver_limit_requests`    | int    | Maximum number of requests per time window                 |
+| `httpapiserver_limit_window`      | int    | Rate limit time window (seconds)                           |
+| `httpapiserver_block_duration`    | int    | Ban duration after exceeding the limit (seconds)           |
 
 #### `nats_config` — NATS Client Configuration
 
-| Item | Type | Description |
-| ---------------------- | ------ | ------------------------------------------- |
-| `nats_server_host` | string | NATS server address |
-| `nats_server_port` | int | NATS server port |
-| `nats_user` | string | NATS username; leave empty for no authentication |
-| `nats_password` | string | NATS password |
-| `nats_client_name` | string | Connection identification name |
-| `nats_max_reconnects` | int | Maximum number of reconnection attempts |
-| `nats_reconnect_wait` | int | Reconnection interval (seconds) |
-| `nats_connect_timeout` | int | Connection timeout (seconds) |
-| `nats_encryption_key` | string | AES global encryption key (16/24/32 bytes); leave empty for plain text |
-| `nats_theme_keys` | map | Per-subject encryption keys |
+| Item                   | Type   | Description                                                            |
+| ---------------------- | ------ | ---------------------------------------------------------------------- |
+| `nats_server_host`     | string | NATS server address                                                    |
+| `nats_server_port`     | int    | NATS server port                                                       |
+| `nats_user`            | string | NATS username; leave empty for no authentication                       |
+| `nats_password`        | string | NATS password                                                          |
+| `nats_client_name`     | string | Connection identification name                                         |
+| `nats_max_reconnects`  | int    | Maximum number of reconnection attempts                                |
+| `nats_reconnect_wait`  | int    | Reconnection interval (seconds)                                        |
+| `nats_connect_timeout` | int    | Connection timeout (seconds)                                           |
+| `nats_encryption_key`  | string | AES global encryption key (16/24/32 bytes); leave empty for plain text |
+| `nats_theme_keys`      | map    | Per-subject encryption keys                                            |
 
 #### `bridge` — Bridge Layer Configuration
 
-| Item | Type | Description |
-| ------------------ | -------- | ---------------------------- |
-| `language` | object | Multi-language configuration (see below) |
-| `log` | object | Log output configuration (see below) |
-| `timezone` | string | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
-| `cdnheader` | []string | CDN real IP header priority list |
-| `error_detail_ips` | []string | IP whitelist allowed to view detailed errors |
-| `cookie_uuid_key` | string | UUID Cookie key name; leave empty to disable |
-| `limits` | object | Global request field length limits |
-| `response_limits` | object | Global response field length limits (same structure as limits) |
+| Item               | Type     | Description                                                            |
+| ------------------ | -------- | ---------------------------------------------------------------------- |
+| `language`         | object   | Multi-language configuration (see below)                               |
+| `log`              | object   | Log output configuration (see below)                                   |
+| `timezone`         | string   | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
+| `cdnheader`        | []string | CDN real IP header priority list                                       |
+| `error_detail_ips` | []string | IP whitelist allowed to view detailed errors                           |
+| `cookie_uuid_key`  | string   | UUID Cookie key name; leave empty to disable                           |
+| `limits`           | object   | Global request field length limits                                     |
+| `response_limits`  | object   | Global response field length limits (same structure as limits)         |
 
 ##### `bridge.language` — Multi-Language Configuration
 
-| Item | Type | Default | Description |
-| ------ | ------ | ----------- | --------------------------------- |
-| `log` | string | `"zh_Hant"` | Log output language |
-| `http` | string | `"en"` | HTTP response error message language |
-| `cli` | string | `"zh_Hant"` | CLI-related message language |
+| Item   | Type   | Default     | Description                          |
+| ------ | ------ | ----------- | ------------------------------------ |
+| `log`  | string | `"zh_Hant"` | Log output language                  |
+| `http` | string | `"en"`      | HTTP response error message language |
+| `cli`  | string | `"zh_Hant"` | CLI-related message language         |
 
 > Supported language codes: `en`, `zh`, `zh_Hant`, `ja`.
 >
 > **Important:** Language text modifications should be made in the translation source files `l10n/app_*.arb`. Do **not** directly edit the `l10n/app_localizations_*.go` generated files, as they will be overwritten during regeneration.
 >
 > After modifying `.arb` files, run the following command to regenerate the Go code:
+>
 > ```bash
 > # Windows
 > .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
 >
 > # Or use go generate
-> go generate .\l10nGlobal.go
+> go generate .\src\l10nGlobal.go
 > ```
 >
 > #### Language Style Conventions
 >
-> | Language Code | Language | Style |
-> |----------|------|------|
-> | `zh` | Simplified Chinese | Mainland China (大陆简体) |
-> | `zh_Hant` | Traditional Chinese | Taiwan (臺灣繁體) |
-> | `en` | English | Standard |
-> | `ja` | Japanese | Standard |
+> | Language Code | Language            | Style                     |
+> | ------------- | ------------------- | ------------------------- |
+> | `zh`          | Simplified Chinese  | Mainland China (大陆简体) |
+> | `zh_Hant`     | Traditional Chinese | Taiwan (臺灣繁體)         |
+> | `en`          | English             | Standard                  |
+> | `ja`          | Japanese            | Standard                  |
 >
 > #### ARB Files
 >
-> | File | Language |
-> |------|------|
-> | `l10n/app_zh.arb` | Simplified Chinese (Mainland) |
-> | `l10n/app_zh_Hant.arb` | Traditional Chinese (Taiwan) |
-> | `l10n/app_en.arb` | English |
-> | `l10n/app_ja.arb` | Japanese |
+> | File                   | Language                      |
+> | ---------------------- | ----------------------------- |
+> | `l10n/app_zh.arb`      | Simplified Chinese (Mainland) |
+> | `l10n/app_zh_Hant.arb` | Traditional Chinese (Taiwan)  |
+> | `l10n/app_en.arb`      | English                       |
+> | `l10n/app_ja.arb`      | Japanese                      |
 >
 > #### Documentation Files (README)
 >
-> | File | Language |
-> |------|------|
-> | `README.md` | English |
+> | File                | Language                      |
+> | ------------------- | ----------------------------- |
+> | `README.md`         | English                       |
 > | `README.zh-Hans.md` | Simplified Chinese (Mainland) |
-> | `README.zh-Hant.md` | Traditional Chinese (Taiwan) |
-> | `README.ja.md` | Japanese |
+> | `README.zh-Hant.md` | Traditional Chinese (Taiwan)  |
+> | `README.ja.md`      | Japanese                      |
 >
 > #### Multi-Language Editing Rules
 >
@@ -565,64 +568,64 @@ routes:
 >
 > ##### `bridge.log` — Log Output Configuration
 
-| Item | Type | Description |
-| ----------------- | ------ | ---------------------------------------- |
-| `stdout` | bool | Whether to also output to the console; `false` writes to files only |
-| `debug` | bool | Whether to enable debug-level logging; `false` enables Info+ only |
-| `overwrite` | bool | Whether to use overwrite mode; `true` clears existing log files on startup; `false` or omission appends only |
-| `color` | bool | Whether to use colored console output; `true` or omission enables color; `false` uses plain text |
-| `files` | object | Independent log file paths for each module (see below) |
+| Item        | Type   | Description                                                                                                  |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------------ |
+| `stdout`    | bool   | Whether to also output to the console; `false` writes to files only                                          |
+| `debug`     | bool   | Whether to enable debug-level logging; `false` enables Info+ only                                            |
+| `overwrite` | bool   | Whether to use overwrite mode; `true` clears existing log files on startup; `false` or omission appends only |
+| `color`     | bool   | Whether to use colored console output; `true` or omission enables color; `false` uses plain text             |
+| `files`     | object | Independent log file paths for each module (see below)                                                       |
 
 ##### `bridge.log.files` — Module Log File Paths
 
-| Item | Type | Description |
-| ----------------- | ------ | ---------------------------- |
-| `main` | string | Main process log file path |
-| `bridge` | string | Bridge routing and forwarding log file path |
-| `http` | string | HTTP request log file path |
-| `nats` | string | NATS client event log file path |
+| Item       | Type   | Description                                  |
+| ---------- | ------ | -------------------------------------------- |
+| `main`     | string | Main process log file path                   |
+| `bridge`   | string | Bridge routing and forwarding log file path  |
+| `http`     | string | HTTP request log file path                   |
+| `nats`     | string | NATS client event log file path              |
 | `httpstat` | string | HTTP server runtime statistics log file path |
-| `module` | string | Generic module log file path |
+| `module`   | string | Generic module log file path                 |
 
 > Log file paths can be relative or absolute. Directories are created automatically if they do not exist.
 > Leave empty or omit a path to disable file writing for that module. If `stdout: false` and all file paths are empty, that module produces no log output.
 
 #### `routes` — Route Rules
 
-| Item | Type | Default | Description |
-| --------------- | -------- | -------------- | ---------------------------- |
-| `path` | string | (required) | HTTP request path |
-| `nats_subject` | string | (required) | Forwarding NATS subject |
-| `methods` | []string | [] (allow all) | List of allowed HTTP methods |
-| `content_type` | string | "" (no check) | Required Content-Type prefix |
-| `timeout` | int | 30 | NATS response timeout (seconds) |
-| `return_fields` | []string | [] (return all) | Field selection for forwarding to microservice |
-| `limits` | object | - | Route-level length limits (overrides global) |
-| `schema_body` | object | - | Request body JSON Schema validation |
-| `response_limits` | object | - | Route-level response length limits (overrides global response_limits) |
-| `response_schema_body` | object | - | Response body JSON Schema validation (same structure as schema_body) |
+| Item                   | Type     | Default         | Description                                                           |
+| ---------------------- | -------- | --------------- | --------------------------------------------------------------------- |
+| `path`                 | string   | (required)      | HTTP request path                                                     |
+| `nats_subject`         | string   | (required)      | Forwarding NATS subject                                               |
+| `methods`              | []string | [] (allow all)  | List of allowed HTTP methods                                          |
+| `content_type`         | string   | "" (no check)   | Required Content-Type prefix                                          |
+| `timeout`              | int      | 30              | NATS response timeout (seconds)                                       |
+| `return_fields`        | []string | [] (return all) | Field selection for forwarding to microservice                        |
+| `limits`               | object   | -               | Route-level length limits (overrides global)                          |
+| `schema_body`          | object   | -               | Request body JSON Schema validation                                   |
+| `response_limits`      | object   | -               | Route-level response length limits (overrides global response_limits) |
+| `response_schema_body` | object   | -               | Response body JSON Schema validation (same structure as schema_body)  |
 
 #### `return_fields` Options
 
-| Field | Description |
-| ------------- | -------------------------------- |
-| `method` | HTTP request method |
-| `path` | Request path |
-| `headers` | Request headers (key-value pairs) |
-| `cookies` | Cookies (key-value pairs) |
-| `remote_addr` | Direct TCP address (including port) |
-| `ip` | Resolved real client IP |
-| `params` | URL query parameters and form parameters (key-value pairs) |
-| `body` | Raw request body content |
+| Field         | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `method`      | HTTP request method                                        |
+| `path`        | Request path                                               |
+| `headers`     | Request headers (key-value pairs)                          |
+| `cookies`     | Cookies (key-value pairs)                                  |
+| `remote_addr` | Direct TCP address (including port)                        |
+| `ip`          | Resolved real client IP                                    |
+| `params`      | URL query parameters and form parameters (key-value pairs) |
+| `body`        | Raw request body content                                   |
 
 #### `schema_body` JSON Schema Validation
 
 In addition to standard JSON Schema fields, two control keys are supported:
 
-| Control Key | Type | Description |
-| ----------- | ------ | ------------------------------------------------ |
-| `root_type` | string | Expected root node type (e.g., `object`, `array`) |
-| `strict` | bool | Strict mode; when `true`, rejects fields not defined in the Schema |
+| Control Key | Type   | Description                                                        |
+| ----------- | ------ | ------------------------------------------------------------------ |
+| `root_type` | string | Expected root node type (e.g., `object`, `array`)                  |
+| `strict`    | bool   | Strict mode; when `true`, rejects fields not defined in the Schema |
 
 Other fields follow the [JSON Schema](https://json-schema.org/) specification (e.g., `required`, `properties`, `type`, etc.).
 
@@ -844,14 +847,14 @@ For more details, see `ApiNatsBridgeTemplate/README.md`.
 
 ## Dependencies
 
-| Package | Purpose |
-| --------------------------------------------------------------------------------------------------------- | ------------------- |
-| [github.com/google/uuid](https://github.com/google/uuid) | UUID generation |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API server framework |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go) | NATS client wrapper |
-| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml) | YAML configuration parsing |
-| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema) | JSON Schema validation |
-| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go) | NATS Go client |
+| Package                                                                                                   | Purpose                    |
+| --------------------------------------------------------------------------------------------------------- | -------------------------- |
+| [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID generation            |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API server framework  |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go)      | NATS client wrapper        |
+| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml)                                                       | YAML configuration parsing |
+| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema)                 | JSON Schema validation     |
+| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go)                                          | NATS Go client             |
 
 ## License
 

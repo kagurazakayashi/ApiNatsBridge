@@ -1,8 +1,8 @@
-// Package main 提供 NATS 用戶端的日誌輸出橋接。
+// Package src 提供 NATS 用戶端的日誌輸出橋接。
 //
 // 此檔案定義 natsLogWriter，將 NATS 底層日誌串接至專案統一日誌系統，
 // 並產生可供 NATS 用戶端初始化時使用的標準 log.Logger 實例。
-package main
+package src
 
 import (
 	"log"
@@ -50,7 +50,7 @@ func (w *natsLogWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// natsLogger 建立供 NATS 使用的標準 log.Logger，並將輸出交由 natsLogWriter 處理。
-func natsLogger() *log.Logger {
+// NatsLogger 建立供 NATS 使用的標準 log.Logger，並將輸出交由 natsLogWriter 處理。
+func NatsLogger() *log.Logger {
 	return log.New(&natsLogWriter{}, "", 0)
 }

@@ -1,10 +1,10 @@
-// Package main 提供統一的日誌記錄功能，支援按模組分類輸出到控制台與獨立檔案。
+// Package src 提供統一的日誌記錄功能，支援按模組分類輸出到控制台與獨立檔案。
 //
 // 此檔案定義全域日誌設定管理與多個模組專用日誌函式，
 // 包含主流程（MAIN）、橋接路由（BRIDGE）、HTTP 請求（HTTP）、
 // HTTP 統計（HTTPSTAT）與通用模組（MODULE）的日誌輸出能力，
 // 並支援時區設定、檔案截斷、同步寫入及彩色控制台輸出。
-package main
+package src
 
 import (
 	"fmt"
@@ -190,7 +190,7 @@ func writeToFile(filePath string, color nyalog.ConsoleColor, prefix string, msg 
 	f.WriteString(line)
 }
 
-// logMain 輸出主流程模組的資訊日誌。
+// LogMain 輸出主流程模組的資訊日誌。
 //
 // 此函式適合記錄應用程式主流程、啟動、初始化與一般執行狀態。
 // 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 main 日誌檔案。
@@ -199,7 +199,7 @@ func writeToFile(filePath string, color nyalog.ConsoleColor, prefix string, msg 
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logMain(format string, a ...interface{}) {
+func LogMain(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
 		stdoutLog(logLevel, nyalog.Info, nyalog.Cyan, "[MAIN]", msg)
@@ -210,7 +210,7 @@ func logMain(format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Cyan, "[MAIN]", msg)
 }
 
-// logError 輸出指定模組的錯誤日誌。
+// LogError 輸出指定模組的錯誤日誌。
 //
 // 此函式會依 module 名稱選擇對應的日誌檔案。
 // 若 module 不在已知清單中，會回退寫入 main 日誌檔案。
@@ -228,7 +228,7 @@ func logMain(format string, a ...interface{}) {
 //   - module：模組名稱。
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logError(module string, format string, a ...interface{}) {
+func LogError(module string, format string, a ...interface{}) {
 	prefix := fmt.Sprintf("[%s][ERROR]", module)
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
@@ -257,7 +257,7 @@ func logError(module string, format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Red, prefix, msg)
 }
 
-// logBridge 輸出橋接流程相關的資訊日誌。
+// LogBridge 輸出橋接流程相關的資訊日誌。
 //
 // 此函式適合記錄跨服務、跨協定或資料轉送流程中的狀態訊息。
 // 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 bridge 日誌檔案。
@@ -265,7 +265,7 @@ func logError(module string, format string, a ...interface{}) {
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logBridge(format string, a ...interface{}) {
+func LogBridge(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
 		stdoutLog(logLevel, nyalog.Info, nyalog.Yellow, "[BRIDGE]", msg)
@@ -276,7 +276,7 @@ func logBridge(format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Yellow, "[BRIDGE]", msg)
 }
 
-// logHTTP 輸出 HTTP 模組相關的資訊日誌。
+// LogHTTP 輸出 HTTP 模組相關的資訊日誌。
 //
 // 此函式適合記錄 HTTP 服務啟動、請求處理、路由或一般 HTTP 模組狀態。
 // 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 HTTP 日誌檔案。
@@ -284,7 +284,7 @@ func logBridge(format string, a ...interface{}) {
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logHTTP(format string, a ...interface{}) {
+func LogHTTP(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
 		stdoutLog(logLevel, nyalog.Info, nyalog.Blue, "[HTTP]", msg)
@@ -295,7 +295,7 @@ func logHTTP(format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Blue, "[HTTP]", msg)
 }
 
-// logHTTPStat 輸出 HTTP 統計相關的日誌。
+// LogHTTPStat 輸出 HTTP 統計相關的日誌。
 //
 // 此類日誌通常用於記錄 HTTP 請求統計、狀態或觀測資訊。
 // 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 HTTPStat 日誌檔案。
@@ -304,7 +304,7 @@ func logHTTP(format string, a ...interface{}) {
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logHTTPStat(format string, a ...interface{}) {
+func LogHTTPStat(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
 		stdoutLog(logLevel, nyalog.OK, nyalog.Purple, "[HTTPSTAT]", msg)
@@ -315,7 +315,7 @@ func logHTTPStat(format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Purple, "[HTTPSTAT]", msg)
 }
 
-// logModule 輸出一般模組相關的資訊日誌。
+// LogModule 輸出一般模組相關的資訊日誌。
 //
 // 適合用於非 MAIN、BRIDGE、HTTP、NATS 等專屬分類的模組訊息。
 // 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 module 日誌檔案。
@@ -324,7 +324,7 @@ func logHTTPStat(format string, a ...interface{}) {
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func logModule(format string, a ...interface{}) {
+func LogModule(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
 		stdoutLog(logLevel, nyalog.Info, nyalog.Cyan, "[MODULE]", msg)

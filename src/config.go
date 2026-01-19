@@ -1,8 +1,8 @@
-// Package main 提供設定檔解析與 CLI 參數處理相關的型別定義與函式。
+// Package src 提供設定檔解析與 CLI 參數處理相關的型別定義與函式。
 //
 // 此檔案定義 ApiNatsBridge 使用的全部設定結構，包括 HTTP 伺服器、
 // NATS 用戶端、橋接層、路由規則與欄位長度限制，並提供設定檔載入與逾時計算等輔助方法。
-package main
+package src
 
 import (
 	"flag"          // 匯入命令列參數解析套件，用於讀取 -c、-v 等啟動參數。
@@ -15,6 +15,9 @@ import (
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"      // 匯入 NATS 用戶端設定與相關型別。
 	"gopkg.in/yaml.v3"                                      // 匯入 YAML 解析套件，用於讀取設定檔內容。
 )
+
+// Verbose 表示是否啟用詳細輸出模式，由命令列參數 -v 控制。
+var Verbose bool
 
 // defaultTimeoutSeconds 定義路由未指定逾時時間時使用的預設秒數。
 //
@@ -287,15 +290,15 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 //   - 路由轉發規則清單
 func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
 	var configPath string                                                    // 保存命令列指定或自動推導出的 YAML 設定檔路徑。
-	flag.StringVar(&configPath, "c", "", lCLI.CliFlagConfig())       // 註冊 -c 參數，用於指定設定檔路徑。
-	flag.BoolVar(&verbose, "v", false, lCLI.CliFlagVerbose())     // 註冊 -v 參數，用於啟用詳細請求資料日誌。
-	flag.StringVar(&logFilePath, "o", "", lCLI.CliFlagOutput()) // 註冊 -o 參數，用於指定統一日誌檔案路徑。
+	flag.StringVar(&configPath, "c", "", LCLI.CliFlagConfig())       // 註冊 -c 參數，用於指定設定檔路徑。
+	flag.BoolVar(&Verbose, "v", false, LCLI.CliFlagVerbose())     // 註冊 -v 參數，用於啟用詳細請求資料日誌。
+	flag.StringVar(&logFilePath, "o", "", LCLI.CliFlagOutput()) // 註冊 -o 參數，用於指定統一日誌檔案路徑。
 	flag.Parse()                                                             // 解析命令列參數，將結果寫入已註冊的變數。
 
 	configPath, appConfig, appConfigErr := loadConfigFile(configPath) // 讀取並解析 YAML 設定檔。
-	logMain(lLog.LogConfigFile(), configPath)                          // 記錄實際使用的設定檔路徑。
+	LogMain(LLog.LogConfigFile(), configPath)                          // 記錄實際使用的設定檔路徑。
 	if appConfigErr != nil {                                          // 若設定檔讀取或解析失敗，記錄錯誤並回傳失敗狀態。
-		logError("MAIN", "%v", appConfigErr)        // 將設定載入錯誤寫入主流程錯誤日誌。
+		LogError("MAIN", "%v", appConfigErr)        // 將設定載入錯誤寫入主流程錯誤日誌。
 		return false, nil, nil, BridgeConfig{}, nil // 回傳失敗狀態與空設定，避免後續使用無效資料。
 	}
 

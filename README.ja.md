@@ -44,17 +44,17 @@
 
 実行時ログ出力では、以下のプレフィックスで発生元モジュールを区別します：
 
-| プレフィックス | ソースファイル | 色 | 用途 |
-|------|----------|------|------|
-| `[MAIN]` | `logger.go` | Cyan | メインプロセスのライフサイクルログ |
-| `[NATS]` | `natsLogger.go` | Green | NATS クライアントの接続とイベント |
-| `[BRIDGE]` | `logger.go` | Yellow | ブリッジルーティングと転送ログ |
-| `[HTTP]` | `logger.go` | Blue | HTTP リクエストログ行 |
-| `[HTTPSTAT]` | `logger.go` | Purple | HTTP サーバー実行時統計 |
-| `[MODULE]` | `logger.go` | Cyan | 汎用モジュールログ |
-| `[NATS][ERROR]` | `logger.go` | Red | NATS 接続エラー |
-| `[HTTP][ERROR]` | `logger.go` | Red | HTTP サーバーエラー |
-| `[MAIN][ERROR]` | `logger.go` | Red | メインプロセスの致命的エラー |
+| プレフィックス  | ソースファイル      | 色     | 用途                               |
+| --------------- | ------------------- | ------ | ---------------------------------- |
+| `[MAIN]`        | `src/logger.go`     | Cyan   | メインプロセスのライフサイクルログ |
+| `[NATS]`        | `src/natsLogger.go` | Green  | NATS クライアントの接続とイベント  |
+| `[BRIDGE]`      | `src/logger.go`     | Yellow | ブリッジルーティングと転送ログ     |
+| `[HTTP]`        | `src/logger.go`     | Blue   | HTTP リクエストログ行              |
+| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP サーバー実行時統計            |
+| `[MODULE]`      | `src/logger.go`     | Cyan   | 汎用モジュールログ                 |
+| `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 接続エラー                    |
+| `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP サーバーエラー                |
+| `[MAIN][ERROR]` | `src/logger.go`     | Red    | メインプロセスの致命的エラー       |
 
 すべてのプレフィックスは、ローカルライブラリ `libNyaruko_Go/nyalog` の `LogCC()` 関数を通じて出力されます。
 
@@ -96,10 +96,10 @@
 
 本プロジェクトには以下の Git サブモジュールが含まれます：
 
-| サブモジュール | パス | 説明 |
-|--------|------|------|
-| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | 依存ライブラリ（`nyalog`、`nyanats`、`nyaapiserver` モジュール） |
-| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | マイクロサービステンプレートプロジェクト |
+| サブモジュール                                                                 | パス                     | 説明                                                             |
+| ------------------------------------------------------------------------------ | ------------------------ | ---------------------------------------------------------------- |
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go)              | `libNyaruko_Go/`         | 依存ライブラリ（`nyalog`、`nyanats`、`nyaapiserver` モジュール） |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | マイクロサービステンプレートプロジェクト                         |
 
 クローン時にサブモジュールも一緒に取得：
 
@@ -132,7 +132,7 @@ cd libNyaruko_Go/go-gen-l10n
 go generate .
 go build .
 
-# 実行ファイルをプロジェクトルートにコピー（go generate ./l10nGlobal.go が見つけられるように）
+# 実行ファイルをプロジェクトルートにコピー（go generate ./src/l10nGlobal.go が見つけられるように）
 # Linux / macOS
 cd ../..
 cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
@@ -155,7 +155,7 @@ copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 または `go generate` を使用：
 
 ```bash
-go generate ./l10nGlobal.go
+go generate ./src/l10nGlobal.go
 ```
 
 ### Windows 実行可能ファイルのアイコン埋め込み
@@ -254,6 +254,7 @@ chmod +x build.sh
 ```
 
 > **注意：** 出力に HTML 形式の README ファイルを含める場合は、Python の `markdown` パッケージを事前にインストールしてください：
+>
 > ```bash
 > pip install markdown
 > ```
@@ -262,11 +263,11 @@ chmod +x build.sh
 
 ### コマンドラインパラメータ
 
-| パラメータ        | 説明                                                                       |
-| ----------- | -------------------------------------------------------------------------- |
+| パラメータ  | 説明                                                                                                             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- |
 | `-c <パス>` | YAML 設定ファイルのパスを指定。未指定の場合は実行可能ファイルと同名の `.yaml` ファイルをデフォルトで読み込みます |
 | `-v`        | 詳細モード。完全なリクエスト/レスポンスデータ（ヘッダー、パラメータ、Cookie、Schema 検証エラーなど）を出力します |
-| `-o <パス>` | すべてのログを指定ファイルに出力（コンソールと各モジュールのログファイルへも引き続き出力されます） |
+| `-o <パス>` | すべてのログを指定ファイルに出力（コンソールと各モジュールのログファイルへも引き続き出力されます）               |
 
 ### 起動例
 
@@ -461,146 +462,147 @@ routes:
 
 #### `httpapiserver_config` — HTTP サーバー設定
 
-| 設定項目                            | 型   | 説明                                   |
-| --------------------------------- | ------ | -------------------------------------- |
+| 設定項目                          | 型     | 説明                                                                                 |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------ |
 | `httpapiserver_host`              | string | サーバーリッスンアドレス、`0.0.0.0` はすべてのネットワークインターフェースでリッスン |
-| `httpapiserver_port`              | int    | リッスンポート                               |
-| `httpapiserver_tls_cert_file`     | string | TLS 証明書ファイルパス、空の場合は HTTP を使用        |
-| `httpapiserver_tls_key_file`      | string | TLS 秘密鍵ファイルパス、空の場合は HTTP を使用        |
-| `httpapiserver_read_timeout`      | int    | リクエスト読み取りタイムアウト（秒）                     |
-| `httpapiserver_write_timeout`     | int    | レスポンス書き込みタイムアウト（秒）                     |
-| `httpapiserver_idle_timeout`      | int    | アイドル接続タイムアウト（秒）                     |
-| `httpapiserver_enable_rate_limit` | bool   | IP レート制限を有効にするか                   |
-| `httpapiserver_limit_requests`    | int    | 時間枠内の最大リクエスト数                   |
-| `httpapiserver_limit_window`      | int    | レート制限時間枠（秒）                 |
-| `httpapiserver_block_duration`    | int    | 制限超過後のブロック時間（秒）                   |
+| `httpapiserver_port`              | int    | リッスンポート                                                                       |
+| `httpapiserver_tls_cert_file`     | string | TLS 証明書ファイルパス、空の場合は HTTP を使用                                       |
+| `httpapiserver_tls_key_file`      | string | TLS 秘密鍵ファイルパス、空の場合は HTTP を使用                                       |
+| `httpapiserver_read_timeout`      | int    | リクエスト読み取りタイムアウト（秒）                                                 |
+| `httpapiserver_write_timeout`     | int    | レスポンス書き込みタイムアウト（秒）                                                 |
+| `httpapiserver_idle_timeout`      | int    | アイドル接続タイムアウト（秒）                                                       |
+| `httpapiserver_enable_rate_limit` | bool   | IP レート制限を有効にするか                                                          |
+| `httpapiserver_limit_requests`    | int    | 時間枠内の最大リクエスト数                                                           |
+| `httpapiserver_limit_window`      | int    | レート制限時間枠（秒）                                                               |
+| `httpapiserver_block_duration`    | int    | 制限超過後のブロック時間（秒）                                                       |
 
 #### `nats_config` — NATS クライアント設定
 
-| 設定項目                 | 型   | 説明                                        |
-| ---------------------- | ------ | ------------------------------------------- |
-| `nats_server_host`     | string | NATS サーバーアドレス                             |
-| `nats_server_port`     | int    | NATS サーバーポート                             |
-| `nats_user`            | string | NATS ユーザー名、空の場合は認証なし                     |
-| `nats_password`        | string | NATS パスワード                                   |
-| `nats_client_name`     | string | 接続識別名                                |
-| `nats_max_reconnects`  | int    | 最大再接続回数                                |
-| `nats_reconnect_wait`  | int    | 再接続間隔（秒）                              |
-| `nats_connect_timeout` | int    | 接続タイムアウト（秒）                              |
+| 設定項目               | 型     | 説明                                                        |
+| ---------------------- | ------ | ----------------------------------------------------------- |
+| `nats_server_host`     | string | NATS サーバーアドレス                                       |
+| `nats_server_port`     | int    | NATS サーバーポート                                         |
+| `nats_user`            | string | NATS ユーザー名、空の場合は認証なし                         |
+| `nats_password`        | string | NATS パスワード                                             |
+| `nats_client_name`     | string | 接続識別名                                                  |
+| `nats_max_reconnects`  | int    | 最大再接続回数                                              |
+| `nats_reconnect_wait`  | int    | 再接続間隔（秒）                                            |
+| `nats_connect_timeout` | int    | 接続タイムアウト（秒）                                      |
 | `nats_encryption_key`  | string | AES グローバル暗号化キー（16/24/32 バイト）、空の場合は平文 |
-| `nats_theme_keys`      | map    | Subject ごとに個別設定する暗号化キー               |
+| `nats_theme_keys`      | map    | Subject ごとに個別設定する暗号化キー                        |
 
 #### `bridge` — ブリッジ層設定
 
-| 設定項目             | 型     | 説明                         |
-| ------------------ | -------- | ---------------------------- |
-| `language`         | object   | 多言語設定（下記参照）     |
-| `log`              | object   | ログ出力設定（下記参照）     |
+| 設定項目           | 型       | 説明                                                                            |
+| ------------------ | -------- | ------------------------------------------------------------------------------- |
+| `language`         | object   | 多言語設定（下記参照）                                                          |
+| `log`              | object   | ログ出力設定（下記参照）                                                        |
 | `timezone`         | string   | タイムゾーン、すべてのログタイムスタンプに影響、例：`"Asia/Tokyo"` または `"9"` |
-| `cdnheader`        | []string | CDN 実 IP ヘッダー優先度リスト   |
-| `error_detail_ips` | []string | 詳細エラーの閲覧を許可する IP ホワイトリスト |
-| `cookie_uuid_key`  | string   | UUID Cookie キー名、空の場合は無効 |
-| `limits`           | object   | グローバルリクエストフィールド長制限         |
-| `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ） |
+| `cdnheader`        | []string | CDN 実 IP ヘッダー優先度リスト                                                  |
+| `error_detail_ips` | []string | 詳細エラーの閲覧を許可する IP ホワイトリスト                                    |
+| `cookie_uuid_key`  | string   | UUID Cookie キー名、空の場合は無効                                              |
+| `limits`           | object   | グローバルリクエストフィールド長制限                                            |
+| `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ）                    |
 
 ##### `bridge.language` — 多言語設定
 
-| 設定項目 | 型   | デフォルト値      | 説明                              |
-| ------ | ------ | ----------- | --------------------------------- |
-| `log`  | string | `"zh_Hant"` | ログ出力言語                      |
-| `http` | string | `"en"`      | HTTP レスポンスエラーメッセージ言語             |
-| `cli`  | string | `"zh_Hant"` | コマンドライン関連メッセージ言語                |
+| 設定項目 | 型     | デフォルト値 | 説明                                |
+| -------- | ------ | ------------ | ----------------------------------- |
+| `log`    | string | `"zh_Hant"`  | ログ出力言語                        |
+| `http`   | string | `"en"`       | HTTP レスポンスエラーメッセージ言語 |
+| `cli`    | string | `"zh_Hant"`  | コマンドライン関連メッセージ言語    |
 
 > サポートされる言語コード：`en`（英語）、`zh`（簡体字中国語）、`zh_Hant`（繁体字中国語）、`ja`（日本語）。
 >
 > **重要：** 言語テキストの変更は翻訳ソースファイル `l10n/app_*.arb` で行ってください。生成ファイル `l10n/app_localizations_*.go` を**直接編集しないでください**。これらは再生成時に上書きされます。
 >
 > `.arb` ファイルを変更した後、以下のコマンドを実行して Go コードを再生成する必要があります：
+>
 > ```bash
 > # Windows
 > .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
 >
 > # または go generate を使用
-> go generate .\l10nGlobal.go
+> go generate .\src\l10nGlobal.go
 > ```
 >
 > #### 言語スタイル規約
 >
-> | 言語コード | 言語 | スタイル |
-> |----------|------|------|
-> | `zh` | 簡体字中国語 | 大陸スタイル（大陸簡体） |
-> | `zh_Hant` | 繁体字中国語 | 台湾スタイル（臺灣繁體） |
-> | `en` | 英語 | 標準 |
-> | `ja` | 日本語 | 標準 |
+> | 言語コード | 言語         | スタイル                 |
+> | ---------- | ------------ | ------------------------ |
+> | `zh`       | 簡体字中国語 | 大陸スタイル（大陸簡体） |
+> | `zh_Hant`  | 繁体字中国語 | 台湾スタイル（臺灣繁體） |
+> | `en`       | 英語         | 標準                     |
+> | `ja`       | 日本語       | 標準                     |
 >
 > #### ARB ファイル
 >
-> | ファイル | 言語 |
-> |------|------|
-> | `l10n/app_zh.arb` | 簡体字中国語（大陸） |
+> | ファイル               | 言語                 |
+> | ---------------------- | -------------------- |
+> | `l10n/app_zh.arb`      | 簡体字中国語（大陸） |
 > | `l10n/app_zh_Hant.arb` | 繁体字中国語（台湾） |
-> | `l10n/app_en.arb` | 英語 |
-> | `l10n/app_ja.arb` | 日本語 |
+> | `l10n/app_en.arb`      | 英語                 |
+> | `l10n/app_ja.arb`      | 日本語               |
 
 ##### `bridge.log` — ログ出力設定
 
-| 設定項目            | 型   | 説明                                     |
-| ----------------- | ------ | ---------------------------------------- |
-| `stdout`          | bool   | コンソールにも同時出力するか、`false` の場合はファイルのみ |
-| `debug`           | bool   | デバッグレベルのログを有効にするか、`false` の場合は Info 以上のみ   |
-| `overwrite`       | bool   | 上書きモードかどうか、`true` の場合は起動時に既存のログファイルをクリア、`false` または未指定の場合は追記のみ |
-| `color`           | bool   | カラーコンソール出力かどうか、`true` または未指定の場合はカラー、`false` の場合はプレーンテキスト |
-| `files`           | object | 各モジュールの個別ログファイルパス（下記参照）       |
+| 設定項目    | 型     | 説明                                                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `stdout`    | bool   | コンソールにも同時出力するか、`false` の場合はファイルのみ                                                    |
+| `debug`     | bool   | デバッグレベルのログを有効にするか、`false` の場合は Info 以上のみ                                            |
+| `overwrite` | bool   | 上書きモードかどうか、`true` の場合は起動時に既存のログファイルをクリア、`false` または未指定の場合は追記のみ |
+| `color`     | bool   | カラーコンソール出力かどうか、`true` または未指定の場合はカラー、`false` の場合はプレーンテキスト             |
+| `files`     | object | 各モジュールの個別ログファイルパス（下記参照）                                                                |
 
 ##### `bridge.log.files` — モジュールログファイルパス
 
-| 設定項目            | 型   | 説明                         |
-| ----------------- | ------ | ---------------------------- |
-| `main`            | string | メインプロセスログファイルパス           |
-| `bridge`          | string | ブリッジルーティングと転送ログファイルパス   |
-| `http`            | string | HTTP リクエストログファイルパス        |
-| `nats`            | string | NATS クライアントイベントログファイルパス  |
-| `httpstat`        | string | HTTP サーバー実行統計ログファイルパス |
-| `module`          | string | 汎用モジュールログファイルパス         |
+| 設定項目   | 型     | 説明                                       |
+| ---------- | ------ | ------------------------------------------ |
+| `main`     | string | メインプロセスログファイルパス             |
+| `bridge`   | string | ブリッジルーティングと転送ログファイルパス |
+| `http`     | string | HTTP リクエストログファイルパス            |
+| `nats`     | string | NATS クライアントイベントログファイルパス  |
+| `httpstat` | string | HTTP サーバー実行統計ログファイルパス      |
+| `module`   | string | 汎用モジュールログファイルパス             |
 
 > ログファイルパスは相対パスでも絶対パスでも構いません。ディレクトリが存在しない場合は自動的に作成されます。
 > パスが空または未指定の場合、そのモジュールはファイルに書き込まれません。`stdout: false` かつすべてのファイルパスが空の場合、そのモジュールのログ出力は行われません。
 
 #### `routes` — ルーティングルール
 
-| 設定項目          | 型     | デフォルト値         | 説明                         |
-| --------------- | -------- | -------------- | ---------------------------- |
-| `path`          | string   | （必須）       | HTTP リクエストパス                |
-| `nats_subject`  | string   | （必須）       | 転送先 NATS Subject          |
-| `methods`       | []string | []（すべて許可） | 許可する HTTP メソッドリスト         |
-| `content_type`  | string   | ""（検証しない）   | 要求する Content-Type プレフィックス     |
-| `timeout`       | int      | 30             | NATS レスポンスタイムアウト（秒）          |
-| `return_fields` | []string | []（すべて返す） | マイクロサービスに転送するフィールド選択       |
-| `limits`              | object   | -              | ルートレベル長制限（グローバル設定を上書き）                 |
-| `schema_body`         | object   | -              | リクエストボディ JSON Schema 検証                      |
-| `response_limits`     | object   | -              | ルートレベルレスポンス長制限（グローバル response_limits を上書き） |
-| `response_schema_body`| object   | -              | レスポンスボディ JSON Schema 検証（構造は schema_body と同じ） |
+| 設定項目               | 型       | デフォルト値     | 説明                                                                |
+| ---------------------- | -------- | ---------------- | ------------------------------------------------------------------- |
+| `path`                 | string   | （必須）         | HTTP リクエストパス                                                 |
+| `nats_subject`         | string   | （必須）         | 転送先 NATS Subject                                                 |
+| `methods`              | []string | []（すべて許可） | 許可する HTTP メソッドリスト                                        |
+| `content_type`         | string   | ""（検証しない） | 要求する Content-Type プレフィックス                                |
+| `timeout`              | int      | 30               | NATS レスポンスタイムアウト（秒）                                   |
+| `return_fields`        | []string | []（すべて返す） | マイクロサービスに転送するフィールド選択                            |
+| `limits`               | object   | -                | ルートレベル長制限（グローバル設定を上書き）                        |
+| `schema_body`          | object   | -                | リクエストボディ JSON Schema 検証                                   |
+| `response_limits`      | object   | -                | ルートレベルレスポンス長制限（グローバル response_limits を上書き） |
+| `response_schema_body` | object   | -                | レスポンスボディ JSON Schema 検証（構造は schema_body と同じ）      |
 
 #### `return_fields` 選択可能な値
 
-| フィールド名        | 説明                             |
-| ------------- | -------------------------------- |
-| `method`      | HTTP リクエストメソッド                    |
-| `path`        | リクエストパス                         |
-| `headers`     | リクエストヘッダー（キーと値のペア）               |
-| `cookies`     | Cookie（キーと値のペア）                 |
-| `remote_addr` | 直接 TCP アドレス（ポート含む）          |
-| `ip`          | 解決後の実際のクライアント IP            |
+| フィールド名  | 説明                                                       |
+| ------------- | ---------------------------------------------------------- |
+| `method`      | HTTP リクエストメソッド                                    |
+| `path`        | リクエストパス                                             |
+| `headers`     | リクエストヘッダー（キーと値のペア）                       |
+| `cookies`     | Cookie（キーと値のペア）                                   |
+| `remote_addr` | 直接 TCP アドレス（ポート含む）                            |
+| `ip`          | 解決後の実際のクライアント IP                              |
 | `params`      | URL クエリパラメータとフォームパラメータ（キーと値のペア） |
-| `body`        | リクエストボディの生内容                   |
+| `body`        | リクエストボディの生内容                                   |
 
 #### `schema_body` JSON Schema 検証
 
 標準の JSON Schema フィールドに加え、以下の 2 つの制御キーをサポートします：
 
-| 制御キー      | 型   | 説明                                             |
-| ----------- | ------ | ------------------------------------------------ |
-| `root_type` | string | ルートノードの期待される型（例：`object`、`array`）           |
+| 制御キー    | 型     | 説明                                                                  |
+| ----------- | ------ | --------------------------------------------------------------------- |
+| `root_type` | string | ルートノードの期待される型（例：`object`、`array`）                   |
 | `strict`    | bool   | 厳密モード、`true` の場合は Schema で定義されていないフィールドを拒否 |
 
 その他のフィールドは [JSON Schema](https://json-schema.org/) 仕様（`required`、`properties`、`type` など）に従います。
@@ -818,14 +820,14 @@ go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml
 
 ## 依存関係
 
-| パッケージ                                                                                                        | 用途                |
-| --------------------------------------------------------------------------------------------------------- | ------------------- |
-| [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID 生成           |
+| パッケージ                                                                                                | 用途                            |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID 生成                       |
 | [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API サーバーフレームワーク |
-| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go)      | NATS クライアントラッパー     |
-| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml)                                                       | YAML 設定解析       |
-| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema)                 | JSON Schema 検証    |
-| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go)                                          | NATS Go クライアント      |
+| [github.com/kagurazakayashi/libNyaruko_Go/nyanats](https://github.com/kagurazakayashi/libNyaruko_Go)      | NATS クライアントラッパー       |
+| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml)                                                       | YAML 設定解析                   |
+| [github.com/santhosh-tekuri/jsonschema/v6](https://github.com/santhosh-tekuri/jsonschema)                 | JSON Schema 検証                |
+| [github.com/nats-io/nats.go](https://github.com/nats-io/nats.go)                                          | NATS Go クライアント            |
 
 ## ライセンス
 

@@ -44,17 +44,17 @@
 
 執行時日誌輸出使用以下前綴區分來源模組：
 
-| 前綴 | 原始檔 | 顏色 | 用途 |
-|------|----------|------|------|
-| `[MAIN]` | `logger.go` | Cyan | 主流程生命週期日誌 |
-| `[NATS]` | `natsLogger.go` | Green | NATS 用戶端連線與事件 |
-| `[BRIDGE]` | `logger.go` | Yellow | 橋接路由與轉送日誌 |
-| `[HTTP]` | `logger.go` | Blue | HTTP 請求日誌行 |
-| `[HTTPSTAT]` | `logger.go` | Purple | HTTP 伺服器執行時統計 |
-| `[MODULE]` | `logger.go` | Cyan | 通用模組日誌 |
-| `[NATS][ERROR]` | `logger.go` | Red | NATS 連線錯誤 |
-| `[HTTP][ERROR]` | `logger.go` | Red | HTTP 伺服器錯誤 |
-| `[MAIN][ERROR]` | `logger.go` | Red | 主流程致命錯誤 |
+| 前綴            | 原始檔              | 顏色   | 用途                  |
+| --------------- | ------------------- | ------ | --------------------- |
+| `[MAIN]`        | `src/logger.go`     | Cyan   | 主流程生命週期日誌    |
+| `[NATS]`        | `src/natsLogger.go` | Green  | NATS 用戶端連線與事件 |
+| `[BRIDGE]`      | `src/logger.go`     | Yellow | 橋接路由與轉送日誌    |
+| `[HTTP]`        | `src/logger.go`     | Blue   | HTTP 請求日誌行       |
+| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP 伺服器執行時統計 |
+| `[MODULE]`      | `src/logger.go`     | Cyan   | 通用模組日誌          |
+| `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 連線錯誤         |
+| `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP 伺服器錯誤       |
+| `[MAIN][ERROR]` | `src/logger.go`     | Red    | 主流程致命錯誤        |
 
 所有前綴皆透過本地庫 `libNyaruko_Go/nyalog` 的 `LogCC()` 函式輸出。
 
@@ -96,10 +96,10 @@
 
 本專案包含以下 Git 子模組：
 
-| 子模組 | 路徑 | 說明 |
-|--------|------|------|
-| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go) | `libNyaruko_Go/` | 相依函式庫（`nyalog`、`nyanats`、`nyaapiserver` 模組） |
-| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服務範本專案 |
+| 子模組                                                                         | 路徑                     | 說明                                                   |
+| ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------ |
+| [libNyaruko_Go](https://github.com/kagurazakayashi/libNyaruko_Go)              | `libNyaruko_Go/`         | 相依函式庫（`nyalog`、`nyanats`、`nyaapiserver` 模組） |
+| [ApiNatsBridgeTemplate](https://github.com/MasaeProject/ApiNatsBridgeTemplate) | `ApiNatsBridgeTemplate/` | 微服務範本專案                                         |
 
 複製時一併拉取子模組：
 
@@ -132,7 +132,7 @@ cd libNyaruko_Go/go-gen-l10n
 go generate .
 go build .
 
-# 將執行檔複製到專案根目錄（以便 go generate ./l10nGlobal.go 能找到它）
+# 將執行檔複製到專案根目錄（以便 go generate ./src/l10nGlobal.go 能找到它）
 # Linux / macOS
 cd ../..
 cp libNyaruko_Go/go-gen-l10n/go-gen-l10n .
@@ -153,8 +153,9 @@ copy libNyaruko_Go\go-gen-l10n\go-gen-l10n.exe .
 ```
 
 或使用 `go generate`：
+
 ```bash
-go generate ./l10nGlobal.go
+go generate ./src/l10nGlobal.go
 ```
 
 ### Windows 可執行檔圖示嵌入
@@ -253,6 +254,7 @@ chmod +x build.sh
 ```
 
 > **注意：** 如果需要輸出 HTML 格式的自述檔案，請先安裝 Python `markdown` 套件：
+>
 > ```bash
 > pip install markdown
 > ```
@@ -460,125 +462,126 @@ routes:
 
 #### `httpapiserver_config` — HTTP 伺服器設定
 
-| 設定項                            | 型別   | 說明                                   |
-| --------------------------------- | ------ | -------------------------------------- |
+| 設定項                            | 型別   | 說明                                         |
+| --------------------------------- | ------ | -------------------------------------------- |
 | `httpapiserver_host`              | string | 伺服器監聽位址，`0.0.0.0` 監聽所有網路介面卡 |
-| `httpapiserver_port`              | int    | 監聽連接埠                             |
-| `httpapiserver_tls_cert_file`     | string | TLS 憑證檔案路徑，留空使用 HTTP        |
-| `httpapiserver_tls_key_file`      | string | TLS 私密金鑰檔案路徑，留空使用 HTTP    |
-| `httpapiserver_read_timeout`      | int    | 讀取請求逾時（秒）                     |
-| `httpapiserver_write_timeout`     | int    | 寫入回應逾時（秒）                     |
-| `httpapiserver_idle_timeout`      | int    | 閒置連線逾時（秒）                     |
-| `httpapiserver_enable_rate_limit` | bool   | 是否啟用 IP 速率限制                   |
-| `httpapiserver_limit_requests`    | int    | 時間視窗內最大請求數                   |
-| `httpapiserver_limit_window`      | int    | 速率限制時間視窗（秒）                 |
-| `httpapiserver_block_duration`    | int    | 超限後封鎖時長（秒）                   |
+| `httpapiserver_port`              | int    | 監聽連接埠                                   |
+| `httpapiserver_tls_cert_file`     | string | TLS 憑證檔案路徑，留空使用 HTTP              |
+| `httpapiserver_tls_key_file`      | string | TLS 私密金鑰檔案路徑，留空使用 HTTP          |
+| `httpapiserver_read_timeout`      | int    | 讀取請求逾時（秒）                           |
+| `httpapiserver_write_timeout`     | int    | 寫入回應逾時（秒）                           |
+| `httpapiserver_idle_timeout`      | int    | 閒置連線逾時（秒）                           |
+| `httpapiserver_enable_rate_limit` | bool   | 是否啟用 IP 速率限制                         |
+| `httpapiserver_limit_requests`    | int    | 時間視窗內最大請求數                         |
+| `httpapiserver_limit_window`      | int    | 速率限制時間視窗（秒）                       |
+| `httpapiserver_block_duration`    | int    | 超限後封鎖時長（秒）                         |
 
 #### `nats_config` — NATS 用戶端設定
 
-| 設定項                 | 型別   | 說明                                        |
-| ---------------------- | ------ | ------------------------------------------- |
-| `nats_server_host`     | string | NATS 伺服器位址                             |
-| `nats_server_port`     | int    | NATS 伺服器連接埠                           |
-| `nats_user`            | string | NATS 使用者名稱，留空不認證                 |
-| `nats_password`        | string | NATS 密碼                                   |
-| `nats_client_name`     | string | 連線識別名稱                                |
-| `nats_max_reconnects`  | int    | 最大重連次數                                |
-| `nats_reconnect_wait`  | int    | 重連間隔（秒）                              |
-| `nats_connect_timeout` | int    | 連線逾時（秒）                              |
+| 設定項                 | 型別   | 說明                                          |
+| ---------------------- | ------ | --------------------------------------------- |
+| `nats_server_host`     | string | NATS 伺服器位址                               |
+| `nats_server_port`     | int    | NATS 伺服器連接埠                             |
+| `nats_user`            | string | NATS 使用者名稱，留空不認證                   |
+| `nats_password`        | string | NATS 密碼                                     |
+| `nats_client_name`     | string | 連線識別名稱                                  |
+| `nats_max_reconnects`  | int    | 最大重連次數                                  |
+| `nats_reconnect_wait`  | int    | 重連間隔（秒）                                |
+| `nats_connect_timeout` | int    | 連線逾時（秒）                                |
 | `nats_encryption_key`  | string | AES 全域加密金鑰（16/24/32 位元組），留空明文 |
-| `nats_theme_keys`      | map    | 按 Subject 獨立設定的加密金鑰               |
+| `nats_theme_keys`      | map    | 按 Subject 獨立設定的加密金鑰                 |
 
 #### `bridge` — 橋接層設定
 
-| 設定項             | 型別     | 說明                         |
-| ------------------ | -------- | ---------------------------- |
-| `language`         | object   | 多國語言設定（詳見下方）     |
-| `log`              | object   | 日誌輸出設定（詳見下方）     |
+| 設定項             | 型別     | 說明                                                      |
+| ------------------ | -------- | --------------------------------------------------------- |
+| `language`         | object   | 多國語言設定（詳見下方）                                  |
+| `log`              | object   | 日誌輸出設定（詳見下方）                                  |
 | `timezone`         | string   | 時區，影響所有日誌時間戳記，如 `"Asia/Shanghai"` 或 `"8"` |
-| `cdnheader`        | []string | CDN 真實 IP 標頭優先級清單   |
-| `error_detail_ips` | []string | 允許檢視詳細錯誤的 IP 白名單 |
-| `cookie_uuid_key`  | string   | UUID Cookie 鍵名，留空不啟用 |
-| `limits`           | object   | 全域請求欄位長度限制         |
-| `response_limits`  | object   | 全域回應欄位長度限制（結構同 limits） |
+| `cdnheader`        | []string | CDN 真實 IP 標頭優先級清單                                |
+| `error_detail_ips` | []string | 允許檢視詳細錯誤的 IP 白名單                              |
+| `cookie_uuid_key`  | string   | UUID Cookie 鍵名，留空不啟用                              |
+| `limits`           | object   | 全域請求欄位長度限制                                      |
+| `response_limits`  | object   | 全域回應欄位長度限制（結構同 limits）                     |
 
 ##### `bridge.language` — 多國語言設定
 
-| 設定項 | 型別   | 預設值      | 說明                              |
-| ------ | ------ | ----------- | --------------------------------- |
-| `log`  | string | `"zh_Hant"` | 日誌輸出語言                      |
-| `http` | string | `"en"`      | HTTP 回應錯誤訊息語言             |
-| `cli`  | string | `"zh_Hant"` | 命令列相關訊息語言                |
+| 設定項 | 型別   | 預設值      | 說明                  |
+| ------ | ------ | ----------- | --------------------- |
+| `log`  | string | `"zh_Hant"` | 日誌輸出語言          |
+| `http` | string | `"en"`      | HTTP 回應錯誤訊息語言 |
+| `cli`  | string | `"zh_Hant"` | 命令列相關訊息語言    |
 
 > 支援的語言代碼：`en`（英語）、`zh`（簡體中文）、`zh_Hant`（繁體中文）、`ja`（日語）。
 >
 > **重要：** 語言文字的修改應在翻譯原始檔 `l10n/app_*.arb` 中進行，**不要**直接編輯 `l10n/app_localizations_*.go` 產生檔案，它們會在重新產生時被覆蓋。
 >
 > 修改 `.arb` 檔案後需執行以下命令重新產生 Go 程式碼：
+>
 > ```bash
 > # Windows
 > .\go-gen-l10n.exe -dir .\l10n -pkg l10n -lang zh_Hant
 >
 > # 或使用 go generate
-> go generate .\l10nGlobal.go
+> go generate .\src\l10nGlobal.go
 > ```
 >
 > #### 語言風格約定
 >
-> | 語言代碼 | 語言 | 風格 |
-> |----------|------|------|
-> | `zh` | 簡體中文 | 大陸風格（大陸簡體） |
+> | 語言代碼  | 語言     | 風格                 |
+> | --------- | -------- | -------------------- |
+> | `zh`      | 簡體中文 | 大陸風格（大陸簡體） |
 > | `zh_Hant` | 繁體中文 | 台灣風格（臺灣繁體） |
-> | `en` | 英語 | 標準 |
-> | `ja` | 日語 | 標準 |
+> | `en`      | 英語     | 標準                 |
+> | `ja`      | 日語     | 標準                 |
 >
 > #### ARB 檔案
 >
-> | 檔案 | 語言 |
-> |------|------|
-> | `l10n/app_zh.arb` | 簡體中文（大陸） |
+> | 檔案                   | 語言             |
+> | ---------------------- | ---------------- |
+> | `l10n/app_zh.arb`      | 簡體中文（大陸） |
 > | `l10n/app_zh_Hant.arb` | 繁體中文（台灣） |
-> | `l10n/app_en.arb` | 英語 |
-> | `l10n/app_ja.arb` | 日語 |
+> | `l10n/app_en.arb`      | 英語             |
+> | `l10n/app_ja.arb`      | 日語             |
 
 ##### `bridge.log` — 日誌輸出設定
 
-| 設定項            | 型別   | 說明                                     |
-| ----------------- | ------ | ---------------------------------------- |
-| `stdout`          | bool   | 是否同時輸出到主控台，`false` 則僅寫檔案 |
-| `debug`           | bool   | 是否啟用偵錯等級日誌，`false` 僅 Info+   |
-| `overwrite`       | bool   | 是否覆蓋模式，`true` 則啟動時清空現有日誌檔案，`false` 或不提供僅附加 |
-| `color`           | bool   | 是否彩色主控台輸出，`true` 或不提供則彩色，`false` 則純文字 |
-| `files`           | object | 各模組獨立日誌檔案路徑（詳見下方）       |
+| 設定項      | 型別   | 說明                                                                  |
+| ----------- | ------ | --------------------------------------------------------------------- |
+| `stdout`    | bool   | 是否同時輸出到主控台，`false` 則僅寫檔案                              |
+| `debug`     | bool   | 是否啟用偵錯等級日誌，`false` 僅 Info+                                |
+| `overwrite` | bool   | 是否覆蓋模式，`true` 則啟動時清空現有日誌檔案，`false` 或不提供僅附加 |
+| `color`     | bool   | 是否彩色主控台輸出，`true` 或不提供則彩色，`false` 則純文字           |
+| `files`     | object | 各模組獨立日誌檔案路徑（詳見下方）                                    |
 
 ##### `bridge.log.files` — 模組日誌檔案路徑
 
-| 設定項            | 型別   | 說明                         |
-| ----------------- | ------ | ---------------------------- |
-| `main`            | string | 主流程日誌檔案路徑           |
-| `bridge`          | string | 橋接路由與轉送日誌檔案路徑   |
-| `http`            | string | HTTP 請求日誌檔案路徑        |
-| `nats`            | string | NATS 用戶端事件日誌檔案路徑  |
-| `httpstat`        | string | HTTP 伺服器執行統計日誌檔案路徑 |
-| `module`          | string | 通用模組日誌檔案路徑         |
+| 設定項     | 型別   | 說明                            |
+| ---------- | ------ | ------------------------------- |
+| `main`     | string | 主流程日誌檔案路徑              |
+| `bridge`   | string | 橋接路由與轉送日誌檔案路徑      |
+| `http`     | string | HTTP 請求日誌檔案路徑           |
+| `nats`     | string | NATS 用戶端事件日誌檔案路徑     |
+| `httpstat` | string | HTTP 伺服器執行統計日誌檔案路徑 |
+| `module`   | string | 通用模組日誌檔案路徑            |
 
 > 日誌檔案路徑為相對或絕對路徑均可。目錄不存在時會自動建立。
 > 路徑留空或不填則該模組不寫入檔案。若 `stdout: false` 且所有檔案路徑均為空，則該模組無日誌輸出。
 
 #### `routes` — 路由規則
 
-| 設定項          | 型別     | 預設值         | 說明                         |
-| --------------- | -------- | -------------- | ---------------------------- |
-| `path`          | string   | （必填）       | HTTP 請求路徑                |
-| `nats_subject`  | string   | （必填）       | 轉送的 NATS Subject          |
-| `methods`       | []string | []（允許全部） | 允許的 HTTP 方法清單         |
-| `content_type`  | string   | ""（不驗證）   | 要求的 Content-Type 前綴     |
-| `timeout`       | int      | 30             | NATS 回應逾時（秒）          |
-| `return_fields` | []string | []（回傳全部） | 轉送給微服務的欄位選擇       |
-| `limits`              | object   | -              | 路由層級長度限制（覆蓋全域）                 |
-| `schema_body`         | object   | -              | 請求主體 JSON Schema 驗證                      |
-| `response_limits`     | object   | -              | 路由層級回應長度限制（覆蓋全域 response_limits） |
-| `response_schema_body`| object   | -              | 回應主體 JSON Schema 驗證（結構同 schema_body） |
+| 設定項                 | 型別     | 預設值         | 說明                                             |
+| ---------------------- | -------- | -------------- | ------------------------------------------------ |
+| `path`                 | string   | （必填）       | HTTP 請求路徑                                    |
+| `nats_subject`         | string   | （必填）       | 轉送的 NATS Subject                              |
+| `methods`              | []string | []（允許全部） | 允許的 HTTP 方法清單                             |
+| `content_type`         | string   | ""（不驗證）   | 要求的 Content-Type 前綴                         |
+| `timeout`              | int      | 30             | NATS 回應逾時（秒）                              |
+| `return_fields`        | []string | []（回傳全部） | 轉送給微服務的欄位選擇                           |
+| `limits`               | object   | -              | 路由層級長度限制（覆蓋全域）                     |
+| `schema_body`          | object   | -              | 請求主體 JSON Schema 驗證                        |
+| `response_limits`      | object   | -              | 路由層級回應長度限制（覆蓋全域 response_limits） |
+| `response_schema_body` | object   | -              | 回應主體 JSON Schema 驗證（結構同 schema_body）  |
 
 #### `return_fields` 可選值
 
@@ -817,7 +820,7 @@ go run ./ApiNatsBridgeTemplate/ -c ApiNatsBridgeTemplate/config.yaml
 
 ## 相依性項目
 
-| 套件                                                                                                        | 用途                |
+| 套件                                                                                                      | 用途                |
 | --------------------------------------------------------------------------------------------------------- | ------------------- |
 | [github.com/google/uuid](https://github.com/google/uuid)                                                  | UUID 產生           |
 | [github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver](https://github.com/kagurazakayashi/libNyaruko_Go) | HTTP API 伺服器框架 |

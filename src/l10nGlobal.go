@@ -1,26 +1,26 @@
-// Package main 提供多國語言（l10n）初始化與全域語言實例管理。
+// Package src 提供多國語言（l10n）初始化與全域語言實例管理。
 //
-// 此檔案定義三個全域語言實例變數（lLog、lHTTP、lCLI），
+// 此檔案定義三個全域語言實例變數（LLog、LHTTP、LCLI），
 // 並提供 InitL10n 函式，讓設定載入階段可以根據 bridge.language 設定
 // 動態切換日誌、HTTP 錯誤回應與 CLI 訊息使用的語言。
-package main
+package src
 
 import (
 	"github.com/kagurazakayashi/ApiNatsBridge/l10n"
 )
 
 var (
-	// lLog 是用於產生日誌相關格式化文字的語言實例。
+	// LLog 是用於產生日誌相關格式化文字的語言實例。
 	// 預設使用繁體中文（zh_Hant），可透過設定檔中的 bridge.language.log 動態切換。
-	lLog l10n.AppLocalizations = l10n.GetLocalizations("zh_Hant")
+	LLog l10n.AppLocalizations = l10n.GetLocalizations("zh_Hant")
 
-	// lHTTP 是用於產生 HTTP 錯誤回應文字的語言實例。
+	// LHTTP 是用於產生 HTTP 錯誤回應文字的語言實例。
 	// 預設使用英文（en），可透過設定檔中的 bridge.language.http 動態切換。
-	lHTTP l10n.AppLocalizations = l10n.GetLocalizations("en")
+	LHTTP l10n.AppLocalizations = l10n.GetLocalizations("en")
 
-	// lCLI 是用於產生命令列說明文字的語言實例。
+	// LCLI 是用於產生命令列說明文字的語言實例。
 	// 預設使用繁體中文（zh_Hant），可透過設定檔中的 bridge.language.cli 動態切換。
-	lCLI l10n.AppLocalizations = l10n.GetLocalizations("zh_Hant")
+	LCLI l10n.AppLocalizations = l10n.GetLocalizations("zh_Hant")
 )
 
 // InitL10n 根據橋接層語言設定初始化全域語言實例。
@@ -36,12 +36,12 @@ func InitL10n(cfg *BridgeLanguageConfig) {
 		return
 	}
 	if cfg.Log != "" {
-		lLog = l10n.GetLocalizations(cfg.Log)
+		LLog = l10n.GetLocalizations(cfg.Log)
 	}
 	if cfg.HTTP != "" {
-		lHTTP = l10n.GetLocalizations(cfg.HTTP)
+		LHTTP = l10n.GetLocalizations(cfg.HTTP)
 	}
 	if cfg.CLI != "" {
-		lCLI = l10n.GetLocalizations(cfg.CLI)
+		LCLI = l10n.GetLocalizations(cfg.CLI)
 	}
 }
