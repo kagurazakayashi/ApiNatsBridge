@@ -10,6 +10,8 @@ ico/icon-hd.png
 *.pid
 .pid
 .pidfile
+private
+temp
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,go,goland

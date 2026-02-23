@@ -1080,27 +1080,45 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 		return h.errResp(502, LHTTP.HttpBadGatewayNats(), err.Error(), clientIP)
 	}
 
-	// 嘗試將微服務回應解析為標準 BridgeResponse。
+	// 偵測微服務回傳格式：檢查 JSON 是否包含 status_code 鍵。
+	//   有 status_code → 視為 BridgeResponse 格式，用其指定的狀態碼與 body。
+	//   無 status_code → 整個回應就是 body，狀態碼預設 200。
 	var bridgeResp BridgeResponse
-	if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
-		// 若解析失敗，代表微服務回傳的是普通字串或非標準格式，直接以 200 回傳原文。
-		if Verbose {
-			LogBridge(LLog.LogBridgeResponseParseFailedVerbose(), err, respStr)
-		} else {
-			LogBridge(LLog.LogBridgeResponseParseFailed(), err)
-		}
-		return &nyaapiserver.HTTPResponse{
-			StatusCode: 200,
-			Body:       []byte(respStr),
+	hasStatusCode := false
+	var rawKeys map[string]json.RawMessage
+	if json.Unmarshal([]byte(respStr), &rawKeys) == nil {
+		_, hasStatusCode = rawKeys["status_code"]
+	}
+
+	if hasStatusCode {
+		if err := json.Unmarshal([]byte(respStr), &bridgeResp); err != nil {
+			// 解析失敗則放棄 BridgeResponse 格式，改用原文。
+			hasStatusCode = false
 		}
 	}
 
-	// 若微服務未指定狀態碼，預設視為 200。
+	if !hasStatusCode || bridgeResp.Body == "" {
+		// 非 BridgeResponse 格式，或 Body 為空：將整份回應視為 HTTP body。
+		bridgeResp = BridgeResponse{
+			StatusCode: 200,
+			Body:       respStr,
+		}
+		// 若原本有 status_code 但 Body 為空，保留微服務指定的狀態碼。
+		if hasStatusCode {
+			var partial struct {
+				StatusCode int `json:"status_code"`
+			}
+			if json.Unmarshal([]byte(respStr), &partial) == nil && partial.StatusCode != 0 {
+				bridgeResp.StatusCode = partial.StatusCode
+			}
+		}
+	}
+
 	if bridgeResp.StatusCode == 0 {
 		bridgeResp.StatusCode = 200
 	}
 
-	// 在回傳用戶端前，先檢查微服務回應是否符合限制與 Schema。
+	// 在回傳用戶端前，檢查微服務回應是否符合限制與 Schema（若有設定）。
 	if validationErr := h.validateResponse(bridgeResp, req.Path, clientIP); validationErr != nil {
 		return validationErr
 	}
