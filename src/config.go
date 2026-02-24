@@ -133,7 +133,7 @@ type BridgeLanguageConfig struct {
 // BridgeConfig 定義 HTTP API 與 NATS 之間的橋接層設定。
 //
 // 此結構集中保存橋接服務的全域行為，包含日誌、時區、
-// CDN 真實 IP 標頭、請求與回應限制、錯誤細節白名單與 Cookie UUID 設定。
+// CDN 真實 IP 標頭、請求與回應限制與錯誤細節白名單。
 type BridgeConfig struct {
 	// Language 定義各模組使用的語言設定；未提供時使用程式預設值。
 	Language *BridgeLanguageConfig `json:"language,omitempty" yaml:"language,omitempty"`
@@ -155,9 +155,6 @@ type BridgeConfig struct {
 
 	// ErrorDetailIPs 定義允許接收錯誤詳細資訊的 IP 白名單，通常用於開發或除錯環境。
 	ErrorDetailIPs []string `json:"error_detail_ips,omitempty" yaml:"error_detail_ips,omitempty"`
-
-	// CookieUUIDKey 定義自動寫入用戶端 Cookie 的 UUID 鍵名；留空時不啟用。
-	CookieUUIDKey string `json:"cookie_uuid_key,omitempty" yaml:"cookie_uuid_key,omitempty"`
 }
 
 // RouteConfig 定義單一路由的 HTTP 到 NATS 轉發規則。
@@ -189,6 +186,12 @@ type RouteConfig struct {
 	// ResponseSchemaBody 定義回應本文的 JSON Schema 驗證規則。
 	ResponseSchemaBody map[string]interface{} `json:"response_schema_body,omitempty" yaml:"response_schema_body,omitempty"`
 
+	// ResponseErrorSchemaBody 定義回應本文發生錯誤時的 JSON Schema 驗證規則。
+	//
+	// 當回應狀態碼 >=400 時，若此欄位有設定，則優先使用此 Schema 驗證回應本文；
+	// 若未設定則沿用 ResponseSchemaBody 的規則。
+	ResponseErrorSchemaBody map[string]interface{} `json:"response_error_schema_body,omitempty" yaml:"response_error_schema_body,omitempty"`
+
 	// ResponseLimits 定義此路由的回應欄位長度限制規則；會與 bridge.response_limits 合併並覆蓋對應欄位。
 	ResponseLimits *LimitRule `json:"response_limits,omitempty" yaml:"response_limits,omitempty"`
 
@@ -206,6 +209,22 @@ type RouteConfig struct {
 	//
 	// 留空或未提供時，預設返回所有欄位。
 	ReturnFields []string `json:"return_fields,omitempty" yaml:"return_fields,omitempty"`
+
+	// CookieUUIDKey 定義自動寫入用戶端 Cookie 的 UUID 鍵名；留空時不啟用。
+	CookieUUIDKey string `json:"cookie_uuid_key,omitempty" yaml:"cookie_uuid_key,omitempty"`
+
+	// HTTPCodeKey 定義微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
+	//
+	// 橋接層會檢查微服務回應 JSON 中是否存在此鍵，以判斷是否為 BridgeResponse 格式。
+	// 預設值為空（不從回應中提取狀態碼），值必須為 100-599 之間的整數。
+	HTTPCodeKey string `json:"http_code_key,omitempty" yaml:"http_code_key,omitempty"`
+
+	// ErrorCodeKey 定義微服務回傳 JSON 中用來表示錯誤碼的鍵名。
+	//
+	// 當橋接層在微服務回應 JSON 中檢測到存在此鍵時，
+	// 會觸發使用 response_error_schema_body 進行回應驗證。
+	// 預設值為空（不啟用），值必須為 int32 範圍內的數值。
+	ErrorCodeKey string `json:"error_code_key,omitempty" yaml:"error_code_key,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。

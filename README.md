@@ -394,11 +394,6 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
-  # Automatic UUID Cookie key name
-  # When set, a UUID is automatically generated for each client without this cookie and sent via Set-Cookie
-  # Leave empty or omit to disable
-  cookie_uuid_key: "brid"
-
   # Global request field length limits (0 or omitted means no limit)
   limits:
     path:
@@ -456,6 +451,9 @@ routes:
           type: string
         email:
           type: string
+    # cookie_uuid_key: "brid"  # UUID Cookie key name (optional)
+    # http_code_key: "status_code"  # Response JSON key for HTTP status code (optional)
+    # error_code_key: "error_code"  # Response JSON key for error code (triggers response_error_schema_body, optional)
 ```
 
 ### Configuration Items in Detail
@@ -500,7 +498,6 @@ routes:
 | `timezone`         | string   | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
 | `cdnheader`        | []string | CDN real IP header priority list                                       |
 | `error_detail_ips` | []string | IP whitelist allowed to view detailed errors                           |
-| `cookie_uuid_key`  | string   | UUID Cookie key name; leave empty to disable                           |
 | `limits`           | object   | Global request field length limits                                     |
 | `response_limits`  | object   | Global response field length limits (same structure as limits)         |
 
@@ -604,6 +601,10 @@ routes:
 | `schema_body`          | object   | -               | Request body JSON Schema validation                                   |
 | `response_limits`      | object   | -               | Route-level response length limits (overrides global response_limits) |
 | `response_schema_body` | object   | -               | Response body JSON Schema validation (same structure as schema_body)  |
+| `response_error_schema_body` | object   | -               | Error response body JSON Schema (used when error_code_key is detected; falls back to response_schema_body) |
+| `cookie_uuid_key`  | string   | "" (disable)    | UUID Cookie key name; leave empty to disable                                   |
+| `http_code_key`    | string   | "" (disable)    | Microservice response JSON key for HTTP status code (100-599); used to detect BridgeResponse format |
+| `error_code_key`   | string   | "" (disable)    | Microservice response JSON key for error code (int32); triggers response_error_schema_body when detected |
 
 #### `return_fields` Options
 

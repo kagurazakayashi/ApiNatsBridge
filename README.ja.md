@@ -394,11 +394,6 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
-  # 自動 UUID Cookie キー名
-  # 設定すると、この Cookie を持たない各クライアントに UUID を自動生成し、Set-Cookie で発行
-  # 空または未指定の場合は無効
-  cookie_uuid_key: "brid"
-
   # グローバルリクエストフィールド長制限（0 または省略は制限なし）
   limits:
     path:
@@ -456,6 +451,9 @@ routes:
           type: string
         email:
           type: string
+    # cookie_uuid_key: "brid"  # UUID Cookie キー名（オプション）
+    # http_code_key: "status_code"  # レスポンス JSON 内の HTTP ステータスコードキー名（オプション）
+    # error_code_key: "error_code"  # レスポンス JSON 内のエラーコードキー名、検出時に response_error_schema_body 検証をトリガー（オプション）
 ```
 
 ### 設定項目詳細
@@ -500,7 +498,6 @@ routes:
 | `timezone`         | string   | タイムゾーン、すべてのログタイムスタンプに影響、例：`"Asia/Tokyo"` または `"9"` |
 | `cdnheader`        | []string | CDN 実 IP ヘッダー優先度リスト                                                  |
 | `error_detail_ips` | []string | 詳細エラーの閲覧を許可する IP ホワイトリスト                                    |
-| `cookie_uuid_key`  | string   | UUID Cookie キー名、空の場合は無効                                              |
 | `limits`           | object   | グローバルリクエストフィールド長制限                                            |
 | `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ）                    |
 
@@ -582,6 +579,10 @@ routes:
 | `schema_body`          | object   | -                | リクエストボディ JSON Schema 検証                                   |
 | `response_limits`      | object   | -                | ルートレベルレスポンス長制限（グローバル response_limits を上書き） |
 | `response_schema_body` | object   | -                | レスポンスボディ JSON Schema 検証（構造は schema_body と同じ）      |
+| `response_error_schema_body` | object   | -                | エラーレスポンスボディ JSON Schema 検証（error_code_key 検出時に使用、未設定の場合は response_schema_body を使用） |
+| `cookie_uuid_key`  | string   | ""（無効）       | UUID Cookie キー名、空の場合は無効                              |
+| `http_code_key`    | string   | ""（無効）       | マイクロサービス応答 JSON 内の HTTP ステータスコードを示すキー名（100-599）；BridgeResponse 形式の検出に使用 |
+| `error_code_key`   | string   | ""（無効）       | マイクロサービス応答 JSON 内のエラーコードを示すキー名（int32）；検出時に response_error_schema_body 検証をトリガー |
 
 #### `return_fields` 選択可能な値
 

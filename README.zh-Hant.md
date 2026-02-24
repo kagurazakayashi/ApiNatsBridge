@@ -394,11 +394,6 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
-  # 自動 UUID Cookie 鍵名
-  # 設定後，對每個無此 Cookie 的用戶端自動產生 UUID 並透過 Set-Cookie 發送
-  # 留空或不填則不啟用
-  cookie_uuid_key: "brid"
-
   # 全域請求欄位長度限制（0 或省略表示不限制）
   limits:
     path:
@@ -456,6 +451,9 @@ routes:
           type: string
         email:
           type: string
+    # cookie_uuid_key: "brid"  # UUID Cookie 鍵名（可選）
+    # http_code_key: "status_code"  # 回應 JSON 中 HTTP 狀態碼的鍵名（可選）
+    # error_code_key: "error_code"  # 回應 JSON 中錯誤碼的鍵名，檢測到時觸發 response_error_schema_body 驗證（可選）
 ```
 
 ### 設定項詳解
@@ -500,7 +498,6 @@ routes:
 | `timezone`         | string   | 時區，影響所有日誌時間戳記，如 `"Asia/Shanghai"` 或 `"8"` |
 | `cdnheader`        | []string | CDN 真實 IP 標頭優先級清單                                |
 | `error_detail_ips` | []string | 允許檢視詳細錯誤的 IP 白名單                              |
-| `cookie_uuid_key`  | string   | UUID Cookie 鍵名，留空不啟用                              |
 | `limits`           | object   | 全域請求欄位長度限制                                      |
 | `response_limits`  | object   | 全域回應欄位長度限制（結構同 limits）                     |
 
@@ -582,6 +579,10 @@ routes:
 | `schema_body`          | object   | -              | 請求主體 JSON Schema 驗證                        |
 | `response_limits`      | object   | -              | 路由層級回應長度限制（覆蓋全域 response_limits） |
 | `response_schema_body` | object   | -              | 回應主體 JSON Schema 驗證（結構同 schema_body）  |
+| `response_error_schema_body` | object   | -              | 錯誤回應主體 JSON Schema 驗證（檢測到 error_code_key 時使用，未設定則沿用 response_schema_body） |
+| `cookie_uuid_key`  | string   | ""（不啟用）    | UUID Cookie 鍵名，留空不啟用                                    |
+| `http_code_key`    | string   | ""（不啟用）    | 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（100-599）；用於檢測 BridgeResponse 格式 |
+| `error_code_key`   | string   | ""（不啟用）    | 微服務回傳 JSON 中表示錯誤碼的鍵名（int32）；檢測到此鍵時觸發 response_error_schema_body 驗證 |
 
 #### `return_fields` 可選值
 

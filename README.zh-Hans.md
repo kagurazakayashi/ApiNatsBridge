@@ -394,11 +394,6 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
-  # 自动 UUID Cookie 键名
-  # 设置后，对每个无此 Cookie 的客户端自动生成 UUID 并通过 Set-Cookie 下发
-  # 留空或不填则不启用
-  cookie_uuid_key: "brid"
-
   # 全局请求字段长度限制（0 或省略表示不限制）
   limits:
     path:
@@ -456,6 +451,9 @@ routes:
           type: string
         email:
           type: string
+    # cookie_uuid_key: "brid"  # UUID Cookie 键名（可选）
+    # http_code_key: "status_code"  # 回应 JSON 中 HTTP 状态码的键名（可选）
+    # error_code_key: "error_code"  # 回应 JSON 中错误码的键名，检测到时触发 response_error_schema_body 验证（可选）
 ```
 
 ### 配置项详解
@@ -500,7 +498,6 @@ routes:
 | `timezone`         | string   | 时区，影响所有日志时间戳，如 `"Asia/Shanghai"` 或 `"8"` |
 | `cdnheader`        | []string | CDN 真实 IP 标头优先级列表                              |
 | `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单                            |
-| `cookie_uuid_key`  | string   | UUID Cookie 键名，留空不启用                            |
 | `limits`           | object   | 全局请求字段长度限制                                    |
 | `response_limits`  | object   | 全局回应字段长度限制（结构同 limits）                   |
 
@@ -582,6 +579,10 @@ routes:
 | `schema_body`          | object   | -              | 请求体 JSON Schema 校验                          |
 | `response_limits`      | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
 | `response_schema_body` | object   | -              | 回应体 JSON Schema 校验（结构同 schema_body）    |
+| `response_error_schema_body` | object   | -              | 错误回应体 JSON Schema 校验（检测到 error_code_key 时使用，未设定则沿用 response_schema_body） |
+| `cookie_uuid_key`  | string   | ""（不启用）    | UUID Cookie 键名，留空不启用                                    |
+| `http_code_key`    | string   | ""（不启用）    | 微服务返回 JSON 中表示 HTTP 状态码的键名（100-599）；用于检测 BridgeResponse 格式 |
+| `error_code_key`   | string   | ""（不启用）    | 微服务返回 JSON 中表示错误码的键名（int32）；检测到此键时触发 response_error_schema_body 验证 |
 
 #### `return_fields` 可选值
 

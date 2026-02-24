@@ -15,6 +15,7 @@
   "log_response_schema_add_failed": "路由 %s 的 response_schema_body 资源添加失败: %v",
   "log_response_schema_invalid": "路由 %s 的 response_schema_body 无效: %v",
   "log_response_schema_loaded": "路由 %s 已加载响应 JSON Schema 校验",
+  "log_response_error_schema_loaded": "路由 %s 已加载错误响应 JSON Schema 校验",
   "log_loaded_summary": "共加载 %d 条路由, %d 个 CDN 头",
   "log_uuid_cookie_enabled": "已启用自动 UUID Cookie，键名: %s",
   "log_uuid_cookie_new_verbose": "为客户端生成新 UUID Cookie: %s=%s",

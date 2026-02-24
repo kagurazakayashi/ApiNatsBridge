@@ -94,9 +94,6 @@ bridge:
     - "127.0.0.1" # IPv4 本機地址
     - "::1" # IPv6 本機地址
 
-  # 自動為用戶端 Cookie 寫入 UUID 的鍵名（留空或不填則不啟用）
-  cookie_uuid_key: "brid" # Cookie 鍵名，首次訪問時自動生成 UUID 並寫入此 Cookie
-
   # 請求欄位長度限制（全域層級，0 或省略表示不限制，可被路由層級覆蓋）
   limits:
     path:
@@ -184,3 +181,6 @@ routes:
           type: string # 類型為字串（客戶端 IP 回顯）
         servertime: # servertime 欄位定義
           type: integer # 類型為整數（伺服器系統毫秒時間戳）
+    # cookie_uuid_key: "" # 自動為用戶端 Cookie 寫入 UUID 的鍵名（留空則不啟用）
+    # http_code_key: "" # 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（留空則不啟用）
+    # error_code_key: "" # 微服務回傳 JSON 中表示錯誤碼的鍵名（檢測到此鍵時觸發 response_error_schema_body 驗證）

@@ -15,6 +15,7 @@
   "log_response_schema_add_failed": "ルート %s の response_schema_body リソース追加失敗: %v",
   "log_response_schema_invalid": "ルート %s の response_schema_body が無効: %v",
   "log_response_schema_loaded": "ルート %s レスポンス JSON Schema 検証を読み込みました",
+  "log_response_error_schema_loaded": "ルート %s エラーレスポンス JSON Schema 検証を読み込みました",
   "log_loaded_summary": "%d ルート, %d CDN ヘッダーを読み込みました",
   "log_uuid_cookie_enabled": "自動 UUID Cookie 有効、キー名: %s",
   "log_uuid_cookie_new_verbose": "クライアントに新しい UUID Cookie を生成: %s=%s",

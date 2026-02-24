@@ -264,11 +264,34 @@ type BridgeHandler struct {
 	// 若未設定或集合為空，表示轉發完整 BridgeRequest。
 	routeReturnFields map[string]map[string]struct{}
 
+	// routeCookieUUIDKeys 是各路徑自動寫入用戶端 Cookie 的 UUID 鍵名。
+	//
+	// 若鍵名為空字串，表示該路由不啟用自動 UUID Cookie。
+	routeCookieUUIDKeys map[string]string
+
+	// routeHTTPCodeKeys 是各路徑微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
+	//
+	// 若為空，表示該路由不從回應中提取 HTTP 狀態碼。
+	routeHTTPCodeKeys map[string]string
+
+	// routeErrorCodeKeys 是各路徑微服務回傳 JSON 中用來表示錯誤碼的鍵名。
+	//
+	// 若為空，表示該路由不啟用錯誤碼檢測與 response_error_schema_body 處理。
+	routeErrorCodeKeys map[string]string
+
 	// routeResponseSchemas 是各路徑的回應 JSON Schema 編譯結果。
 	routeResponseSchemas map[string]*jsonschema.Schema
 
 	// routeResponseSchemaMaps 是各路徑的原始回應 Schema 對應表。
 	routeResponseSchemaMaps map[string]map[string]interface{}
+
+	// routeResponseErrorSchemas 是各路徑的錯誤回應 JSON Schema 編譯結果。
+	//
+	// 當 HTTP 狀態碼 >=400 時，若此路由有設定 response_error_schema_body 則優先使用。
+	routeResponseErrorSchemas map[string]*jsonschema.Schema
+
+	// routeResponseErrorSchemaMaps 是各路徑的原始錯誤回應 Schema 對應表。
+	routeResponseErrorSchemaMaps map[string]map[string]interface{}
 
 	// responseLimits 是全域回應欄位長度限制規則。
 	responseLimits *LimitRule
@@ -280,11 +303,6 @@ type BridgeHandler struct {
 	//
 	// map 的 key 為 IP 字串；value 使用空 struct 表示存在即可。
 	errorDetailIPs map[string]struct{}
-
-	// cookieUUIDKey 是自動為用戶端 Cookie 寫入 UUID 的鍵名。
-	//
-	// 若為空字串，表示不啟用自動 UUID Cookie。
-	cookieUUIDKey string
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -292,7 +310,8 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, cookieUUIDKey string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string) *BridgeHandler {
+
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
 	timeoutMap := make(map[string]time.Duration)
@@ -302,8 +321,13 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
 	returnFieldsMap := make(map[string]map[string]struct{})
+	routeCookieUUIDKeyMap := make(map[string]string)
+	routeHTTPCodeKeyMap := make(map[string]string)
+	routeErrorCodeKeyMap := make(map[string]string)
 	routeResponseSchemas := make(map[string]*jsonschema.Schema)
 	routeResponseSchemaMaps := make(map[string]map[string]interface{})
+	routeResponseErrorSchemas := make(map[string]*jsonschema.Schema)
+	routeResponseErrorSchemaMaps := make(map[string]map[string]interface{})
 	routeResponseLimitsMap := make(map[string]*LimitRule)
 
 	// 將錯誤詳細資訊白名單轉為 set，方便請求處理時 O(1) 查詢。
@@ -352,6 +376,22 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			returnFieldsMap[r.Path] = fieldSet
 		}
 
+		// 保存此路由的 Cookie UUID 鍵名設定。
+		if r.CookieUUIDKey != "" {
+			routeCookieUUIDKeyMap[r.Path] = r.CookieUUIDKey
+			LogBridge(LLog.LogUuidCookieEnabled(), r.CookieUUIDKey)
+		}
+
+		// 保存此路由的 HTTP 狀態碼鍵名設定。
+		if r.HTTPCodeKey != "" {
+			routeHTTPCodeKeyMap[r.Path] = r.HTTPCodeKey
+		}
+
+		// 保存此路由的錯誤碼鍵名設定。
+		if r.ErrorCodeKey != "" {
+			routeErrorCodeKeyMap[r.Path] = r.ErrorCodeKey
+		}
+
 		// 建立並編譯請求本文 JSON Schema。
 		schemaMap := buildSchema(&r)
 		if schemaMap != nil {
@@ -393,60 +433,82 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			routeResponseSchemas[r.Path] = schema
 			LogBridge(LLog.LogResponseSchemaLoaded(), r.Path)
 		}
+
+		// 建立並編譯微服務錯誤回應本文 JSON Schema。
+		responseErrorSchemaMap := buildSchemaFromMap(r.ResponseErrorSchemaBody)
+		if responseErrorSchemaMap != nil {
+			routeResponseErrorSchemaMaps[r.Path] = responseErrorSchemaMap
+			url := "config://routes" + r.Path + "/response_error"
+			if err := compiler.AddResource(url, responseErrorSchemaMap); err != nil {
+				LogBridge(LLog.LogResponseSchemaAddFailed(), r.Path, err)
+				continue
+			}
+			schema, err := compiler.Compile(url)
+			if err != nil {
+				LogBridge(LLog.LogResponseSchemaInvalid(), r.Path, err)
+				continue
+			}
+			routeResponseErrorSchemas[r.Path] = schema
+			LogBridge(LLog.LogResponseErrorSchemaLoaded(), r.Path)
+		}
 	}
 
 	// 輸出初始化摘要，方便啟動時確認設定載入狀態。
 	LogBridge(LLog.LogLoadedSummary(), len(routeMap), len(cdnHeaders))
-	if cookieUUIDKey != "" {
-		LogBridge(LLog.LogUuidCookieEnabled(), cookieUUIDKey)
-	}
 
 	// 回傳已完成初始化的 BridgeHandler。
 	return &BridgeHandler{
-		natsClient:              natsClient,
-		routes:                  routeMap,
-		routeTimeouts:           timeoutMap,
-		routeMethods:            methodMap,
-		routeContentTypes:       contentTypeMap,
-		routeSchemas:            routeSchemas,
-		routeSchemaMaps:         routeSchemaMaps,
-		cdnHeaders:              cdnHeaders,
-		limits:                  limits,
-		routeLimits:             routeLimitsMap,
-		routeReturnFields:       returnFieldsMap,
-		routeResponseSchemas:    routeResponseSchemas,
-		routeResponseSchemaMaps: routeResponseSchemaMaps,
-		responseLimits:          responseLimits,
-		routeResponseLimits:     routeResponseLimitsMap,
-		errorDetailIPs:          errorIPSet,
-		cookieUUIDKey:           cookieUUIDKey,
+		natsClient:                   natsClient,
+		routes:                       routeMap,
+		routeTimeouts:                timeoutMap,
+		routeMethods:                 methodMap,
+		routeContentTypes:            contentTypeMap,
+		routeSchemas:                 routeSchemas,
+		routeSchemaMaps:              routeSchemaMaps,
+		cdnHeaders:                   cdnHeaders,
+		limits:                       limits,
+		routeLimits:                  routeLimitsMap,
+		routeReturnFields:            returnFieldsMap,
+		routeCookieUUIDKeys:          routeCookieUUIDKeyMap,
+		routeHTTPCodeKeys:            routeHTTPCodeKeyMap,
+		routeErrorCodeKeys:           routeErrorCodeKeyMap,
+		routeResponseSchemas:         routeResponseSchemas,
+		routeResponseSchemaMaps:      routeResponseSchemaMaps,
+		routeResponseErrorSchemas:    routeResponseErrorSchemas,
+		routeResponseErrorSchemaMaps: routeResponseErrorSchemaMaps,
+		responseLimits:               responseLimits,
+		routeResponseLimits:          routeResponseLimitsMap,
+		errorDetailIPs:               errorIPSet,
 	}
 }
 
 // Handle 是 HTTP 請求的統一入口。
 //
-// 此方法會先依照 cookieUUIDKey 設定檢查是否需要為用戶端產生 UUID Cookie，
+// 此方法會先依照路由的 cookieUUIDKey 設定檢查是否需要為用戶端產生 UUID Cookie，
 // 再呼叫 handleRequest 執行實際請求處理。若產生了新的 UUID，會在回應中加入 Set-Cookie。
 // 此方法適合作為外部 HTTP 伺服器呼叫 BridgeHandler 的主要進入點。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
 	// newUUID 用於記錄本次請求是否新產生了 Cookie 識別值。
 	var newUUID string
 
-	// 若設定了 cookieUUIDKey，代表啟用自動 UUID Cookie 機制。
-	if h.cookieUUIDKey != "" {
+	// 取得此路由的 Cookie UUID 鍵名設定。
+	cookieUUIDKey := h.routeCookieUUIDKeys[req.Path]
+
+	// 若設定了 cookieUUIDKey，代表此路由啟用自動 UUID Cookie 機制。
+	if cookieUUIDKey != "" {
 		// 確保 Cookie map 已初始化，避免後續寫入時 panic。
 		if req.Cookies == nil {
 			req.Cookies = make(map[string]string)
 		}
 
 		// 若用戶端尚未帶入指定 Cookie，則產生新的 UUID 並放入請求上下文。
-		if _, exists := req.Cookies[h.cookieUUIDKey]; !exists {
+		if _, exists := req.Cookies[cookieUUIDKey]; !exists {
 			newUUID = strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
-			req.Cookies[h.cookieUUIDKey] = newUUID
+			req.Cookies[cookieUUIDKey] = newUUID
 			if Verbose {
-				LogBridge(LLog.LogUuidCookieNewVerbose(), h.cookieUUIDKey, newUUID)
+				LogBridge(LLog.LogUuidCookieNewVerbose(), cookieUUIDKey, newUUID)
 			} else {
-				LogBridge(LLog.LogUuidCookieNew(), h.cookieUUIDKey)
+				LogBridge(LLog.LogUuidCookieNew(), cookieUUIDKey)
 			}
 		}
 	}
@@ -459,7 +521,7 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 		if resp.Headers == nil {
 			resp.Headers = make(map[string]string)
 		}
-		resp.Headers["Set-Cookie"] = h.cookieUUIDKey + "=" + newUUID + "; Path=/; HttpOnly"
+		resp.Headers["Set-Cookie"] = cookieUUIDKey + "=" + newUUID + "; Path=/; HttpOnly"
 	}
 
 	// 回傳最終 HTTPResponse。
@@ -886,7 +948,7 @@ func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clien
 //
 // 若回應不符合規則，會回傳 502 錯誤；驗證通過則回傳 nil。
 // 此方法可避免後端微服務回傳過大、格式錯誤或不符合契約的資料直接暴露給用戶端。
-func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clientIP string) *nyaapiserver.HTTPResponse {
+func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clientIP string, hasErrorCode bool) *nyaapiserver.HTTPResponse {
 	// 合併全域回應限制與路由層級回應限制。
 	effectiveLimits := h.responseLimits
 	if rl, has := h.routeResponseLimits[path]; has {
@@ -920,7 +982,14 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 	}
 
 	// 若路由設定了回應 Schema，則驗證 BridgeResponse.Body 必須是合法且符合契約的 JSON。
-	if schema, hasSchema := h.routeResponseSchemas[path]; hasSchema && len(resp.Body) > 0 {
+	//   當檢測到 error_code_key 時，若有設定 response_error_schema_body 則優先使用錯誤 Schema。
+	schema := h.routeResponseSchemas[path]
+	if hasErrorCode {
+		if errSchema, has := h.routeResponseErrorSchemas[path]; has {
+			schema = errSchema
+		}
+	}
+	if schema != nil && len(resp.Body) > 0 {
 		var bodyJSON interface{}
 		if err := json.Unmarshal([]byte(resp.Body), &bodyJSON); err != nil {
 			return h.errResp(502, LHTTP.HttpResponseBodyNotJson(), err.Error(), clientIP)
@@ -1080,14 +1149,24 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 		return h.errResp(502, LHTTP.HttpBadGatewayNats(), err.Error(), clientIP)
 	}
 
-	// 偵測微服務回傳格式：檢查 JSON 是否包含 status_code 鍵。
-	//   有 status_code → 視為 BridgeResponse 格式，用其指定的狀態碼與 body。
-	//   無 status_code → 整個回應就是 body，狀態碼預設 200。
+	// 偵測微服務回傳格式：檢查 JSON 是否包含自訂的 HTTP 狀態碼鍵與錯誤碼鍵。
+	//   有 HTTP 狀態碼鍵 → 視為 BridgeResponse 格式，用其指定的狀態碼與 body。
+	//   無 HTTP 狀態碼鍵 → 整個回應就是 body，狀態碼預設 200。
+	//   有錯誤碼鍵 → 觸發 response_error_schema_body 驗證。
 	var bridgeResp BridgeResponse
 	hasStatusCode := false
+	hasErrorCode := false
+	httpCodeKey := h.routeHTTPCodeKeys[req.Path]
+	errorCodeKey := h.routeErrorCodeKeys[req.Path]
+
 	var rawKeys map[string]json.RawMessage
 	if json.Unmarshal([]byte(respStr), &rawKeys) == nil {
-		_, hasStatusCode = rawKeys["status_code"]
+		if httpCodeKey != "" {
+			_, hasStatusCode = rawKeys[httpCodeKey]
+		}
+		if errorCodeKey != "" {
+			_, hasErrorCode = rawKeys[errorCodeKey]
+		}
 	}
 
 	if hasStatusCode {
@@ -1103,13 +1182,13 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 			StatusCode: 200,
 			Body:       respStr,
 		}
-		// 若原本有 status_code 但 Body 為空，保留微服務指定的狀態碼。
+		// 若原本有 HTTP 狀態碼鍵但 Body 為空，保留微服務指定的狀態碼。
 		if hasStatusCode {
-			var partial struct {
-				StatusCode int `json:"status_code"`
-			}
-			if json.Unmarshal([]byte(respStr), &partial) == nil && partial.StatusCode != 0 {
-				bridgeResp.StatusCode = partial.StatusCode
+			if sc, ok := rawKeys[httpCodeKey]; ok {
+				var scInt int
+				if json.Unmarshal(sc, &scInt) == nil && scInt >= 100 && scInt <= 599 {
+					bridgeResp.StatusCode = scInt
+				}
 			}
 		}
 	}
@@ -1119,7 +1198,7 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	}
 
 	// 在回傳用戶端前，檢查微服務回應是否符合限制與 Schema（若有設定）。
-	if validationErr := h.validateResponse(bridgeResp, req.Path, clientIP); validationErr != nil {
+	if validationErr := h.validateResponse(bridgeResp, req.Path, clientIP, hasErrorCode); validationErr != nil {
 		return validationErr
 	}
 

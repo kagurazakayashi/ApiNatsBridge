@@ -15,6 +15,7 @@
   "log_response_schema_add_failed": "Route %s response_schema_body resource add failed: %v",
   "log_response_schema_invalid": "Route %s response_schema_body invalid: %v",
   "log_response_schema_loaded": "Route %s loaded response JSON Schema validation",
+  "log_response_error_schema_loaded": "Route %s loaded error response JSON Schema validation",
   "log_loaded_summary": "Loaded %d routes, %d CDN headers",
   "log_uuid_cookie_enabled": "Auto UUID Cookie enabled, key: %s",
   "log_uuid_cookie_new_verbose": "Generated new UUID Cookie for client: %s=%s",
