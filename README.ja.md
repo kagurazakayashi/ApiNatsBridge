@@ -16,7 +16,6 @@
 - **リクエストフィールド長制限** — グローバルおよびルートレベルでのパス、ヘッダー、Cookie、パラメータ、リクエストボディの長さ制限
 - **AES 暗号化 NATS 通信** — グローバルキーおよび Subject ごとの個別キーによる AES 対称暗号化
 - **CDN 実 IP 解決** — Cloudflare、Akamai、Fastly、AWS CloudFront、Alibaba Cloud CDN など主要 CDN の実際のクライアント IP 抽出をサポート
-- **自動 UUID Cookie 生成** — クライアントに追跡用 UUID Cookie を自動生成
 - **IP レート制限** — IP 単位のリクエスト頻度制限とブロック機構を内蔵
 - **TLS/HTTPS サポート** — 証明書を設定することで HTTPS を有効化可能
 - **`/ping` エンドポイント** — NATS マイクロサービス経由の遅延測定エンドポイント
@@ -451,8 +450,7 @@ routes:
           type: string
         email:
           type: string
-    # cookie_uuid_key: "brid"  # UUID Cookie キー名（オプション）
-    # http_code_key: "status_code"  # レスポンス JSON 内の HTTP ステータスコードキー名（オプション）
+    # http_code_key: "status_code"  # レスポンス JSON 内の HTTP ステータスコードキー名、未指定時はデフォルト 200（オプション）
     # error_code_key: "error_code"  # レスポンス JSON 内のエラーコードキー名、検出時に response_error_schema_body 検証をトリガー（オプション）
 ```
 
@@ -580,8 +578,7 @@ routes:
 | `response_limits`      | object   | -                | ルートレベルレスポンス長制限（グローバル response_limits を上書き） |
 | `response_schema_body` | object   | -                | レスポンスボディ JSON Schema 検証（構造は schema_body と同じ）      |
 | `response_error_schema_body` | object   | -                | エラーレスポンスボディ JSON Schema 検証（error_code_key 検出時に使用、未設定の場合は response_schema_body を使用） |
-| `cookie_uuid_key`  | string   | ""（無効）       | UUID Cookie キー名、空の場合は無効                              |
-| `http_code_key`    | string   | ""（無効）       | マイクロサービス応答 JSON 内の HTTP ステータスコードを示すキー名（100-599）；BridgeResponse 形式の検出に使用 |
+| `http_code_key`    | string   | ""（デフォルト200） | マイクロサービス応答 JSON 内の HTTP ステータスコードを示すキー名（100-599）；指定時はクライアントに返す前にこのキーを除去 |
 | `error_code_key`   | string   | ""（無効）       | マイクロサービス応答 JSON 内のエラーコードを示すキー名（int32）；検出時に response_error_schema_body 検証をトリガー |
 
 #### `return_fields` 選択可能な値

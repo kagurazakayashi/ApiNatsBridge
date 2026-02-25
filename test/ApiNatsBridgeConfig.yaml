@@ -181,6 +181,5 @@ routes:
           type: string # 類型為字串（客戶端 IP 回顯）
         servertime: # servertime 欄位定義
           type: integer # 類型為整數（伺服器系統毫秒時間戳）
-    # cookie_uuid_key: "" # 自動為用戶端 Cookie 寫入 UUID 的鍵名（留空則不啟用）
     # http_code_key: "" # 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（留空則不啟用）
     # error_code_key: "" # 微服務回傳 JSON 中表示錯誤碼的鍵名（檢測到此鍵時觸發 response_error_schema_body 驗證）

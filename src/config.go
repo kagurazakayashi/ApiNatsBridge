@@ -210,13 +210,11 @@ type RouteConfig struct {
 	// 留空或未提供時，預設返回所有欄位。
 	ReturnFields []string `json:"return_fields,omitempty" yaml:"return_fields,omitempty"`
 
-	// CookieUUIDKey 定義自動寫入用戶端 Cookie 的 UUID 鍵名；留空時不啟用。
-	CookieUUIDKey string `json:"cookie_uuid_key,omitempty" yaml:"cookie_uuid_key,omitempty"`
-
 	// HTTPCodeKey 定義微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
 	//
 	// 橋接層會檢查微服務回應 JSON 中是否存在此鍵，以判斷是否為 BridgeResponse 格式。
-	// 預設值為空（不從回應中提取狀態碼），值必須為 100-599 之間的整數。
+	// 若未指定（空字串），預設狀態碼為 200。
+	// 若指定此鍵，回應中的該鍵值必須為 100-599 之間的整數，且回傳給用戶端時會移除此鍵。
 	HTTPCodeKey string `json:"http_code_key,omitempty" yaml:"http_code_key,omitempty"`
 
 	// ErrorCodeKey 定義微服務回傳 JSON 中用來表示錯誤碼的鍵名。

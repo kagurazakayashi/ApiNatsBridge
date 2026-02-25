@@ -16,7 +16,6 @@
 - **請求欄位長度限制** — 全域及路由層級的路徑、標頭、Cookie、參數、請求主體長度限制
 - **AES 加密 NATS 通訊** — 支援全域金鑰和按 Subject 獨立金鑰的 AES 對稱加密
 - **CDN 真實 IP 解析** — 支援 Cloudflare、Akamai、Fastly、AWS CloudFront、阿里雲 CDN 等主流 CDN 的真實用戶端 IP 擷取
-- **自動 UUID Cookie 產生** — 為用戶端自動產生追蹤用 UUID Cookie
 - **IP 速率限制** — 內建 IP 維度的請求頻率限制與封鎖機制
 - **TLS/HTTPS 支援** — 設定憑證即可啟用 HTTPS
 - **`/ping` 端點** — 透過 NATS 微服務實作的延遲測量端點
@@ -451,8 +450,7 @@ routes:
           type: string
         email:
           type: string
-    # cookie_uuid_key: "brid"  # UUID Cookie 鍵名（可選）
-    # http_code_key: "status_code"  # 回應 JSON 中 HTTP 狀態碼的鍵名（可選）
+    # http_code_key: "status_code"  # 回應 JSON 中 HTTP 狀態碼的鍵名，不指定時預設 200（可選）
     # error_code_key: "error_code"  # 回應 JSON 中錯誤碼的鍵名，檢測到時觸發 response_error_schema_body 驗證（可選）
 ```
 
@@ -580,8 +578,7 @@ routes:
 | `response_limits`      | object   | -              | 路由層級回應長度限制（覆蓋全域 response_limits） |
 | `response_schema_body` | object   | -              | 回應主體 JSON Schema 驗證（結構同 schema_body）  |
 | `response_error_schema_body` | object   | -              | 錯誤回應主體 JSON Schema 驗證（檢測到 error_code_key 時使用，未設定則沿用 response_schema_body） |
-| `cookie_uuid_key`  | string   | ""（不啟用）    | UUID Cookie 鍵名，留空不啟用                                    |
-| `http_code_key`    | string   | ""（不啟用）    | 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（100-599）；用於檢測 BridgeResponse 格式 |
+| `http_code_key`    | string   | ""（預設 200）   | 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（100-599）；指定後回傳用戶端時會從回應中移除此鍵 |
 | `error_code_key`   | string   | ""（不啟用）    | 微服務回傳 JSON 中表示錯誤碼的鍵名（int32）；檢測到此鍵時觸發 response_error_schema_body 驗證 |
 
 #### `return_fields` 可選值

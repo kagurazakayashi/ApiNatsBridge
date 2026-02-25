@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -41,8 +40,6 @@ type BridgeRequest struct {
 	Headers map[string]string `json:"headers"`
 
 	// Cookies 是原始 HTTP Cookie 鍵值對集合。
-	//
-	// 若橋接層啟用了自動 UUID Cookie，此集合也可能包含系統自動補入的識別值。
 	Cookies map[string]string `json:"cookies"`
 
 	// RemoteAddr 是直接連線的用戶端位址，通常取自底層 socket。
@@ -216,8 +213,7 @@ func coerceFormValues(formMap map[string]interface{}, schemaMap map[string]inter
 //   - 驗證 HTTP 方法、Content-Type、請求長度限制與 JSON Schema。
 //   - 解析實際用戶端 IP。
 //   - 將 HTTP 請求轉換為 NATS Request。
-//   - 驗證微服務回應並轉換為 HTTPResponse。
-//   - 視設定自動產生並寫入 UUID Cookie。
+//    - 驗證微服務回應並轉換為 HTTPResponse。//
 //
 // 此結構會在服務啟動時依照設定檔初始化，請求處理階段則盡量只讀取已建立的對應表。
 type BridgeHandler struct {
@@ -263,11 +259,6 @@ type BridgeHandler struct {
 	//
 	// 若未設定或集合為空，表示轉發完整 BridgeRequest。
 	routeReturnFields map[string]map[string]struct{}
-
-	// routeCookieUUIDKeys 是各路徑自動寫入用戶端 Cookie 的 UUID 鍵名。
-	//
-	// 若鍵名為空字串，表示該路由不啟用自動 UUID Cookie。
-	routeCookieUUIDKeys map[string]string
 
 	// routeHTTPCodeKeys 是各路徑微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
 	//
@@ -321,7 +312,6 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
 	returnFieldsMap := make(map[string]map[string]struct{})
-	routeCookieUUIDKeyMap := make(map[string]string)
 	routeHTTPCodeKeyMap := make(map[string]string)
 	routeErrorCodeKeyMap := make(map[string]string)
 	routeResponseSchemas := make(map[string]*jsonschema.Schema)
@@ -374,12 +364,6 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 				fieldSet[f] = struct{}{}
 			}
 			returnFieldsMap[r.Path] = fieldSet
-		}
-
-		// 保存此路由的 Cookie UUID 鍵名設定。
-		if r.CookieUUIDKey != "" {
-			routeCookieUUIDKeyMap[r.Path] = r.CookieUUIDKey
-			LogBridge(LLog.LogUuidCookieEnabled(), r.CookieUUIDKey)
 		}
 
 		// 保存此路由的 HTTP 狀態碼鍵名設定。
@@ -469,7 +453,6 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		limits:                       limits,
 		routeLimits:                  routeLimitsMap,
 		routeReturnFields:            returnFieldsMap,
-		routeCookieUUIDKeys:          routeCookieUUIDKeyMap,
 		routeHTTPCodeKeys:            routeHTTPCodeKeyMap,
 		routeErrorCodeKeys:           routeErrorCodeKeyMap,
 		routeResponseSchemas:         routeResponseSchemas,
@@ -484,48 +467,10 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 
 // Handle 是 HTTP 請求的統一入口。
 //
-// 此方法會先依照路由的 cookieUUIDKey 設定檢查是否需要為用戶端產生 UUID Cookie，
-// 再呼叫 handleRequest 執行實際請求處理。若產生了新的 UUID，會在回應中加入 Set-Cookie。
+// 此方法會將請求交由 handleRequest 執行路由、驗證與 NATS 轉發。
 // 此方法適合作為外部 HTTP 伺服器呼叫 BridgeHandler 的主要進入點。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
-	// newUUID 用於記錄本次請求是否新產生了 Cookie 識別值。
-	var newUUID string
-
-	// 取得此路由的 Cookie UUID 鍵名設定。
-	cookieUUIDKey := h.routeCookieUUIDKeys[req.Path]
-
-	// 若設定了 cookieUUIDKey，代表此路由啟用自動 UUID Cookie 機制。
-	if cookieUUIDKey != "" {
-		// 確保 Cookie map 已初始化，避免後續寫入時 panic。
-		if req.Cookies == nil {
-			req.Cookies = make(map[string]string)
-		}
-
-		// 若用戶端尚未帶入指定 Cookie，則產生新的 UUID 並放入請求上下文。
-		if _, exists := req.Cookies[cookieUUIDKey]; !exists {
-			newUUID = strings.ToUpper(strings.ReplaceAll(uuid.New().String(), "-", ""))
-			req.Cookies[cookieUUIDKey] = newUUID
-			if Verbose {
-				LogBridge(LLog.LogUuidCookieNewVerbose(), cookieUUIDKey, newUUID)
-			} else {
-				LogBridge(LLog.LogUuidCookieNew(), cookieUUIDKey)
-			}
-		}
-	}
-
-	// 交由內部請求處理流程執行路由、驗證與 NATS 轉發。
-	resp := h.handleRequest(req)
-
-	// 若本次有產生新 UUID，將其透過 Set-Cookie 寫回用戶端。
-	if newUUID != "" && resp != nil {
-		if resp.Headers == nil {
-			resp.Headers = make(map[string]string)
-		}
-		resp.Headers["Set-Cookie"] = cookieUUIDKey + "=" + newUUID + "; Path=/; HttpOnly"
-	}
-
-	// 回傳最終 HTTPResponse。
-	return resp
+	return h.handleRequest(req)
 }
 
 // handleRequest 是 HTTP 請求的實際處理邏輯。
@@ -939,6 +884,18 @@ func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clien
 	})
 }
 
+// isBodyEmpty 會檢查回應本文是否為空白內容。
+//
+// 空白內容定義為：
+//   - 空字串或僅含空白字元。
+//   - "null" 字面值。
+//   - 空的 JSON 物件 "{}"。
+//   - 空的 JSON 陣列 "[]"。
+func isBodyEmpty(body string) bool {
+	body = strings.TrimSpace(body)
+	return body == "" || body == "null" || body == "{}" || body == "[]"
+}
+
 // validateResponse 會驗證從 NATS 微服務回傳的 BridgeResponse 是否符合設定規則。
 //
 // 驗證內容包含：
@@ -1178,18 +1135,45 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	if !hasStatusCode || bridgeResp.Body == "" {
 		// 非 BridgeResponse 格式，或 Body 為空：將整份回應視為 HTTP body。
-		bridgeResp = BridgeResponse{
-			StatusCode: 200,
-			Body:       respStr,
-		}
-		// 若原本有 HTTP 狀態碼鍵但 Body 為空，保留微服務指定的狀態碼。
+		bodyStr := respStr
+
+		// 若原本有 HTTP 狀態碼鍵，保留狀態碼並從回應本文中移除此鍵。
 		if hasStatusCode {
+			// 先取出狀態碼值。
+			var scInt int
 			if sc, ok := rawKeys[httpCodeKey]; ok {
-				var scInt int
-				if json.Unmarshal(sc, &scInt) == nil && scInt >= 100 && scInt <= 599 {
-					bridgeResp.StatusCode = scInt
-				}
+				json.Unmarshal(sc, &scInt)
 			}
+			// 從回應中移除此鍵，避免暴露給用戶端。
+			delete(rawKeys, httpCodeKey)
+			if cleaned, err := json.Marshal(rawKeys); err == nil {
+				bodyStr = string(cleaned)
+			}
+			// 套用狀態碼。
+			if scInt >= 100 && scInt <= 599 {
+				bridgeResp.StatusCode = scInt
+			}
+		}
+
+		// 檢查回應本文是否為空白內容（空字串、僅空白、空 JSON 物件或陣列）。
+		if isBodyEmpty(bodyStr) {
+			return h.errResp(502, LHTTP.HttpBadGatewayNats(),
+				fmt.Sprintf("microservice returned empty response body (raw: %q)", respStr), clientIP)
+		}
+
+		bridgeResp = BridgeResponse{
+			StatusCode: bridgeResp.StatusCode,
+			Body:       bodyStr,
+		}
+	}
+
+	// 若 hasStatusCode 為真且 bridgeResp.Body 不為空，即為標準 BridgeResponse 格式，
+	// 狀態碼已由微服務指定，無需移除鍵值（body 欄位本身即不含狀態碼鍵）。
+	// 但仍須檢查 body 是否為空白內容。
+	if hasStatusCode && bridgeResp.Body != "" {
+		if isBodyEmpty(bridgeResp.Body) {
+			return h.errResp(502, LHTTP.HttpBadGatewayNats(),
+				fmt.Sprintf("microservice returned empty response body (raw: %q)", respStr), clientIP)
 		}
 	}
 

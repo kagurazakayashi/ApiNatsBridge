@@ -16,7 +16,6 @@ A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST reque
 - **Request Field Length Limits** — Global and per-route length limits for paths, headers, cookies, parameters, and request bodies
 - **AES Encrypted NATS Communication** — Supports AES symmetric encryption with a global key or per-subject keys
 - **CDN Real IP Resolution** — Supports extracting the real client IP from major CDN providers such as Cloudflare, Akamai, Fastly, AWS CloudFront, and Alibaba Cloud CDN
-- **Automatic UUID Cookie Generation** — Automatically generates UUID tracking cookies for clients
 - **IP Rate Limiting** — Built-in per-IP request rate limiting and banning mechanism
 - **TLS/HTTPS Support** — Enable HTTPS by configuring a certificate
 - **`/ping` Endpoint** — Latency measurement endpoint via NATS microservice
@@ -451,8 +450,7 @@ routes:
           type: string
         email:
           type: string
-    # cookie_uuid_key: "brid"  # UUID Cookie key name (optional)
-    # http_code_key: "status_code"  # Response JSON key for HTTP status code (optional)
+    # http_code_key: "status_code"  # Response JSON key for HTTP status code; defaults to 200 if not set (optional)
     # error_code_key: "error_code"  # Response JSON key for error code (triggers response_error_schema_body, optional)
 ```
 
@@ -602,8 +600,7 @@ routes:
 | `response_limits`      | object   | -               | Route-level response length limits (overrides global response_limits) |
 | `response_schema_body` | object   | -               | Response body JSON Schema validation (same structure as schema_body)  |
 | `response_error_schema_body` | object   | -               | Error response body JSON Schema (used when error_code_key is detected; falls back to response_schema_body) |
-| `cookie_uuid_key`  | string   | "" (disable)    | UUID Cookie key name; leave empty to disable                                   |
-| `http_code_key`    | string   | "" (disable)    | Microservice response JSON key for HTTP status code (100-599); used to detect BridgeResponse format |
+| `http_code_key`    | string   | "" (defaults to 200) | Microservice response JSON key for HTTP status code (100-599); when specified, this key is removed from the response before returning to client |
 | `error_code_key`   | string   | "" (disable)    | Microservice response JSON key for error code (int32); triggers response_error_schema_body when detected |
 
 #### `return_fields` Options

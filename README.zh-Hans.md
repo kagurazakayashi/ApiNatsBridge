@@ -16,7 +16,6 @@
 - **请求字段长度限制** — 全局及路由级别的路径、标头、Cookie、参数、请求体长度限制
 - **AES 加密 NATS 通信** — 支持全局密钥和按 Subject 独立密钥的 AES 对称加密
 - **CDN 真实 IP 解析** — 支持 Cloudflare、Akamai、Fastly、AWS CloudFront、阿里云 CDN 等主流 CDN 的真实客户端 IP 提取
-- **自动 UUID Cookie 生成** — 为客户端自动生成跟踪用 UUID Cookie
 - **IP 速率限制** — 内置 IP 维度的请求频率限制与封禁机制
 - **TLS/HTTPS 支持** — 配置证书即可启用 HTTPS
 - **`/ping` 端点** — 通过 NATS 微服务实现的延迟测量端点
@@ -451,8 +450,7 @@ routes:
           type: string
         email:
           type: string
-    # cookie_uuid_key: "brid"  # UUID Cookie 键名（可选）
-    # http_code_key: "status_code"  # 回应 JSON 中 HTTP 状态码的键名（可选）
+    # http_code_key: "status_code"  # 回应 JSON 中 HTTP 状态码的键名，不指定时默认 200（可选）
     # error_code_key: "error_code"  # 回应 JSON 中错误码的键名，检测到时触发 response_error_schema_body 验证（可选）
 ```
 
@@ -580,8 +578,7 @@ routes:
 | `response_limits`      | object   | -              | 路由级别回应长度限制（覆盖全局 response_limits） |
 | `response_schema_body` | object   | -              | 回应体 JSON Schema 校验（结构同 schema_body）    |
 | `response_error_schema_body` | object   | -              | 错误回应体 JSON Schema 校验（检测到 error_code_key 时使用，未设定则沿用 response_schema_body） |
-| `cookie_uuid_key`  | string   | ""（不启用）    | UUID Cookie 键名，留空不启用                                    |
-| `http_code_key`    | string   | ""（不启用）    | 微服务返回 JSON 中表示 HTTP 状态码的键名（100-599）；用于检测 BridgeResponse 格式 |
+| `http_code_key`    | string   | ""（默认 200）   | 微服务返回 JSON 中表示 HTTP 状态码的键名（100-599）；指定后回传客户端时会从回应中移除此键 |
 | `error_code_key`   | string   | ""（不启用）    | 微服务返回 JSON 中表示错误码的键名（int32）；检测到此键时触发 response_error_schema_body 验证 |
 
 #### `return_fields` 可选值
