@@ -294,6 +294,24 @@ type BridgeHandler struct {
 	//
 	// map 的 key 為 IP 字串；value 使用空 struct 表示存在即可。
 	errorDetailIPs map[string]struct{}
+
+	// bridgeHTTPCodeKey 是橋接層全域預設的 HTTP 狀態碼鍵名。
+	bridgeHTTPCodeKey string
+
+	// bridgeErrorCodeKey 是橋接層全域預設的錯誤碼鍵名。
+	bridgeErrorCodeKey string
+
+	// bridgeResponseSchemaBody 是橋接層全域預設的回應 JSON Schema 對應表。
+	bridgeResponseSchemaBody map[string]interface{}
+
+	// bridgeResponseErrorSchemaBody 是橋接層全域預設的錯誤回應 JSON Schema 對應表。
+	bridgeResponseErrorSchemaBody map[string]interface{}
+
+	// bridgeErrorInfoShow 是橋接層全域預設的錯誤資訊顯示模式。
+	bridgeErrorInfoShow *int
+
+	// routeErrorInfoShow 是各路徑的錯誤資訊顯示模式。
+	routeErrorInfoShow map[string]*int
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -301,7 +319,7 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int) *BridgeHandler {
 
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
@@ -319,6 +337,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeResponseErrorSchemas := make(map[string]*jsonschema.Schema)
 	routeResponseErrorSchemaMaps := make(map[string]map[string]interface{})
 	routeResponseLimitsMap := make(map[string]*LimitRule)
+	routeErrorInfoShowMap := make(map[string]*int)
 
 	// 將錯誤詳細資訊白名單轉為 set，方便請求處理時 O(1) 查詢。
 	errorIPSet := make(map[string]struct{}, len(errorDetailIPs))
@@ -369,11 +388,20 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		// 保存此路由的 HTTP 狀態碼鍵名設定。
 		if r.HTTPCodeKey != "" {
 			routeHTTPCodeKeyMap[r.Path] = r.HTTPCodeKey
+		} else if bridgeHTTPCodeKey != "" {
+			routeHTTPCodeKeyMap[r.Path] = bridgeHTTPCodeKey
 		}
 
 		// 保存此路由的錯誤碼鍵名設定。
 		if r.ErrorCodeKey != "" {
 			routeErrorCodeKeyMap[r.Path] = r.ErrorCodeKey
+		} else if bridgeErrorCodeKey != "" {
+			routeErrorCodeKeyMap[r.Path] = bridgeErrorCodeKey
+		}
+
+		// 保存此路由的錯誤資訊顯示模式。
+		if r.ErrorInfoShow != nil {
+			routeErrorInfoShowMap[r.Path] = r.ErrorInfoShow
 		}
 
 		// 建立並編譯請求本文 JSON Schema。
@@ -402,6 +430,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 
 		// 建立並編譯微服務回應本文 JSON Schema。
 		responseSchemaMap := buildSchemaFromMap(r.ResponseSchemaBody)
+		if responseSchemaMap == nil {
+			responseSchemaMap = buildSchemaFromMap(bridgeResponseSchemaBody)
+		}
 		if responseSchemaMap != nil {
 			routeResponseSchemaMaps[r.Path] = responseSchemaMap
 			url := "config://routes" + r.Path + "/response"
@@ -420,6 +451,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 
 		// 建立並編譯微服務錯誤回應本文 JSON Schema。
 		responseErrorSchemaMap := buildSchemaFromMap(r.ResponseErrorSchemaBody)
+		if responseErrorSchemaMap == nil {
+			responseErrorSchemaMap = buildSchemaFromMap(bridgeResponseErrorSchemaBody)
+		}
 		if responseErrorSchemaMap != nil {
 			routeResponseErrorSchemaMaps[r.Path] = responseErrorSchemaMap
 			url := "config://routes" + r.Path + "/response_error"
@@ -462,6 +496,12 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		responseLimits:               responseLimits,
 		routeResponseLimits:          routeResponseLimitsMap,
 		errorDetailIPs:               errorIPSet,
+		bridgeHTTPCodeKey:            bridgeHTTPCodeKey,
+		bridgeErrorCodeKey:           bridgeErrorCodeKey,
+		bridgeResponseSchemaBody:     bridgeResponseSchemaBody,
+		bridgeResponseErrorSchemaBody: bridgeResponseErrorSchemaBody,
+		bridgeErrorInfoShow:          bridgeErrorInfoShow,
+		routeErrorInfoShow:           routeErrorInfoShowMap,
 	}
 }
 
@@ -1179,6 +1219,36 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	if bridgeResp.StatusCode == 0 {
 		bridgeResp.StatusCode = 200
+	}
+
+	// 錯誤資訊記錄與回傳：當檢測到 error_code_key 時，依 error_info_show 設定處理。
+	if hasErrorCode {
+		// 決定有效的 error_info_show：路由層級 > bridge 層級 > 預設 0。
+		effectiveErrorInfoShow := 0
+		if eis, ok := h.routeErrorInfoShow[req.Path]; ok && eis != nil {
+			effectiveErrorInfoShow = *eis
+		} else if h.bridgeErrorInfoShow != nil {
+			effectiveErrorInfoShow = *h.bridgeErrorInfoShow
+		}
+
+		// 記錄到模組日誌：僅值為 1、2、3 時記錄。
+		if effectiveErrorInfoShow >= 1 && effectiveErrorInfoShow <= 3 {
+			LogModule("[%s] %s", natsSubject, bridgeResp.Body)
+		}
+
+		// 決定是否將微服務錯誤內容回傳給使用者。
+		returnContent := false
+		switch effectiveErrorInfoShow {
+		case 2, 4:
+			returnContent = h.isErrorDetailIP(clientIP) // 僅白名單 IP。
+		case 3, 5:
+			returnContent = true // 所有使用者。
+		}
+
+		if !returnContent {
+			// 不回傳微服務原始內容，替換為通用錯誤訊息。
+			bridgeResp.Body = LHTTP.HttpBadGatewayNats()
+		}
 	}
 
 	// 在回傳用戶端前，檢查微服務回應是否符合限制與 Schema（若有設定）。

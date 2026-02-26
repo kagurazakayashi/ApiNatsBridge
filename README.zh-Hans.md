@@ -20,6 +20,7 @@
 - **TLS/HTTPS 支持** — 配置证书即可启用 HTTPS
 - **`/ping` 端点** — 通过 NATS 微服务实现的延迟测量端点
 - **IP 白名单错误详情** — 仅允许指定 IP 查看详细错误信息，生产环境仅返回通用错误
+- **微服务错误信息显示控制** — 通过 `error_info_show` 参数设定是否记录、输出微服务错误内容，以及是否将内容返回给白名单 IP 用户或所有用户
 - **多国语言支持 (i18n/l10n)** — 日志、HTTP 响应、CLI 帮助文本均支持多语言，可在配置文件中分别设置（支持 en、zh、zh_Hant、ja）
 - **优雅关闭** — 捕获系统信号后有序关闭 HTTP 服务器、取消 NATS 订阅并断开连接
 
@@ -393,6 +394,18 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
+  # 微服务返回 JSON 中 HTTP 状态码的全局默认键名（可按路由覆盖）
+  http_code_key: "status_code"
+  # 微服务返回 JSON 中错误码的全局默认键名（可按路由覆盖）
+  error_code_key: "error_code"
+  # 响应正文 JSON Schema 验证的全局默认规则（可按路由覆盖）
+  # response_schema_body: {}
+  # 错误响应正文 JSON Schema 验证的全局默认规则（可按路由覆盖）
+  # response_error_schema_body: {}
+  # 微服务错误信息显示模式的全局默认值（可按路由覆盖）
+  #   0=不记录、1=记录+输出、2=记录+输出+白名单可见、3=记录+输出+全员可见、4=不记录+白名单可见、5=不记录+全员可见
+  error_info_show: 1
+
   # 全局请求字段长度限制（0 或省略表示不限制）
   limits:
     path:
@@ -452,6 +465,7 @@ routes:
           type: string
     # http_code_key: "status_code"  # 回应 JSON 中 HTTP 状态码的键名，不指定时默认 200（可选）
     # error_code_key: "error_code"  # 回应 JSON 中错误码的键名，检测到时触发 response_error_schema_body 验证（可选）
+    # error_info_show: 2  # 错误信息显示模式（覆盖 bridge 级别）；0=不记录、1=记录、2=记录+白名单可见、3=记录+全员可见、4=不记录+白名单可见、5=不记录+全员可见（可选）
 ```
 
 ### 配置项详解
@@ -496,7 +510,12 @@ routes:
 | `timezone`         | string   | 时区，影响所有日志时间戳，如 `"Asia/Shanghai"` 或 `"8"` |
 | `cdnheader`        | []string | CDN 真实 IP 标头优先级列表                              |
 | `error_detail_ips` | []string | 允许查看详细错误的 IP 白名单                            |
-| `limits`           | object   | 全局请求字段长度限制                                    |
+| `http_code_key`    | string   | 微服务返回 JSON 中 HTTP 状态码的全局默认键名；可按路由覆盖 |
+| `error_code_key`   | string   | 微服务返回 JSON 中错误码的全局默认键名；可按路由覆盖       |
+| `response_schema_body`      | object | 响应正文 JSON Schema 验证的全局默认规则；可按路由覆盖   |
+| `response_error_schema_body`| object | 错误响应正文 JSON Schema 验证的全局默认规则；可按路由覆盖 |
+| `error_info_show`  | int      | 微服务错误信息显示模式的全局默认值；可按路由覆盖（0=不记录、1=记录+输出、2=记录+输出+白名单可见、3=记录+输出+全员可见、4=不记录+白名单可见、5=不记录+全员可见） |
+| `limits`           | object   | 全局请求字段长度限制                                     |
 | `response_limits`  | object   | 全局回应字段长度限制（结构同 limits）                   |
 
 ##### `bridge.language` — 多国语言配置
@@ -580,6 +599,7 @@ routes:
 | `response_error_schema_body` | object   | -              | 错误回应体 JSON Schema 校验（检测到 error_code_key 时使用，未设定则沿用 response_schema_body） |
 | `http_code_key`    | string   | ""（默认 200）   | 微服务返回 JSON 中表示 HTTP 状态码的键名（100-599）；指定后回传客户端时会从回应中移除此键 |
 | `error_code_key`   | string   | ""（不启用）    | 微服务返回 JSON 中表示错误码的键名（int32）；检测到此键时触发 response_error_schema_body 验证 |
+| `error_info_show`  | int      | 0               | 微服务错误信息显示模式（覆盖 bridge 级别）；0=不记录、1=记录、2=记录+白名单可见、3=记录+全员可见、4=不记录+白名单可见、5=不记录+全员可见 |
 
 #### `return_fields` 可选值
 

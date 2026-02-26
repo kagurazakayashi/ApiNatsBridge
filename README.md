@@ -20,6 +20,7 @@ A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST reque
 - **TLS/HTTPS Support** — Enable HTTPS by configuring a certificate
 - **`/ping` Endpoint** — Latency measurement endpoint via NATS microservice
 - **IP Whitelist Error Details** — Only allows specified IPs to view detailed error information; production environments return generic errors only
+- **Microservice Error Info Display Control** — Configurable `error_info_show` parameter controls whether microservice error content is logged and returned to whitelist IP users or all users
 - **Multi-Language Support (i18n/l10n)** — Logs, HTTP responses, and CLI help text all support multiple languages, configurable independently in the config file (supports en, zh, zh_Hant, ja)
 - **Graceful Shutdown** — Gracefully shuts down the HTTP server, cancels NATS subscriptions, and disconnects upon receiving system signals
 
@@ -393,6 +394,18 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
+  # Global default key for HTTP status code in microservice response JSON (overridable per route)
+  http_code_key: "status_code"
+  # Global default key for error code in microservice response JSON (overridable per route)
+  error_code_key: "error_code"
+  # Global default JSON Schema for response body validation (overridable per route)
+  # response_schema_body: {}
+  # Global default JSON Schema for error response body validation (overridable per route)
+  # response_error_schema_body: {}
+  # Global default error info display mode (overridable per route)
+  #   0=off, 1=log+output, 2=log+output+whitelist, 3=log+output+all, 4=whitelist only, 5=all users
+  error_info_show: 1
+
   # Global request field length limits (0 or omitted means no limit)
   limits:
     path:
@@ -452,6 +465,7 @@ routes:
           type: string
     # http_code_key: "status_code"  # Response JSON key for HTTP status code; defaults to 200 if not set (optional)
     # error_code_key: "error_code"  # Response JSON key for error code (triggers response_error_schema_body, optional)
+    # error_info_show: 2  # Error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all (optional)
 ```
 
 ### Configuration Items in Detail
@@ -496,6 +510,11 @@ routes:
 | `timezone`         | string   | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
 | `cdnheader`        | []string | CDN real IP header priority list                                       |
 | `error_detail_ips` | []string | IP whitelist allowed to view detailed errors                           |
+| `http_code_key`    | string   | Global default key for HTTP status code in microservice response JSON; overridable per route |
+| `error_code_key`   | string   | Global default key for error code in microservice response JSON; overridable per route |
+| `response_schema_body`      | object | Global default JSON Schema for response body validation; overridable per route |
+| `response_error_schema_body`| object | Global default JSON Schema for error response body validation; overridable per route |
+| `error_info_show`  | int      | Global default error info display mode; overridable per route (0=off, 1=log+output, 2=log+output+whitelist, 3=log+output+all, 4=whitelist only, 5=all users) |
 | `limits`           | object   | Global request field length limits                                     |
 | `response_limits`  | object   | Global response field length limits (same structure as limits)         |
 
@@ -602,6 +621,7 @@ routes:
 | `response_error_schema_body` | object   | -               | Error response body JSON Schema (used when error_code_key is detected; falls back to response_schema_body) |
 | `http_code_key`    | string   | "" (defaults to 200) | Microservice response JSON key for HTTP status code (100-599); when specified, this key is removed from the response before returning to client |
 | `error_code_key`   | string   | "" (disable)    | Microservice response JSON key for error code (int32); triggers response_error_schema_body when detected |
+| `error_info_show`  | int      | 0               | Microservice error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all |
 
 #### `return_fields` Options
 

@@ -155,6 +155,29 @@ type BridgeConfig struct {
 
 	// ErrorDetailIPs 定義允許接收錯誤詳細資訊的 IP 白名單，通常用於開發或除錯環境。
 	ErrorDetailIPs []string `json:"error_detail_ips,omitempty" yaml:"error_detail_ips,omitempty"`
+
+	// HTTPCodeKey 定義微服務回傳 JSON 中用來表示 HTTP 狀態碼的全域預設鍵名；可被單一路由設定覆蓋。
+	HTTPCodeKey string `json:"http_code_key,omitempty" yaml:"http_code_key,omitempty"`
+
+	// ErrorCodeKey 定義微服務回傳 JSON 中用來表示錯誤碼的全域預設鍵名；可被單一路由設定覆蓋。
+	ErrorCodeKey string `json:"error_code_key,omitempty" yaml:"error_code_key,omitempty"`
+
+	// ResponseSchemaBody 定義回應本文的 JSON Schema 驗證全域預設規則；可被單一路由設定覆蓋。
+	ResponseSchemaBody map[string]interface{} `json:"response_schema_body,omitempty" yaml:"response_schema_body,omitempty"`
+
+	// ResponseErrorSchemaBody 定義回應本文發生錯誤時的 JSON Schema 驗證全域預設規則；可被單一路由設定覆蓋。
+	ResponseErrorSchemaBody map[string]interface{} `json:"response_error_schema_body,omitempty" yaml:"response_error_schema_body,omitempty"`
+
+	// ErrorInfoShow 定義微服務錯誤資訊的顯示模式全域預設值；可被單一路由設定覆蓋。
+	//
+	// 有效值：
+	//   0 = 不在日誌檔案中記錄（僅保留基本的 [HTTP] 日誌）。
+	//   1 = 在日誌檔案中記錄並輸出。
+	//   2 = 在日誌檔案中記錄並輸出，並且將內容回傳給白名單 IP 使用者。
+	//   3 = 在日誌檔案中記錄並輸出，並且將內容回傳給所有使用者。
+	//   4 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給白名單 IP 使用者。
+	//   5 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給所有使用者。
+	ErrorInfoShow *int `json:"error_info_show,omitempty" yaml:"error_info_show,omitempty"`
 }
 
 // RouteConfig 定義單一路由的 HTTP 到 NATS 轉發規則。
@@ -223,6 +246,17 @@ type RouteConfig struct {
 	// 會觸發使用 response_error_schema_body 進行回應驗證。
 	// 預設值為空（不啟用），值必須為 int32 範圍內的數值。
 	ErrorCodeKey string `json:"error_code_key,omitempty" yaml:"error_code_key,omitempty"`
+
+	// ErrorInfoShow 定義微服務錯誤資訊的顯示模式；未設定時使用 bridge 層全域預設值。
+	//
+	// 有效值：
+	//   0 = 不在日誌檔案中記錄（僅保留基本的 [HTTP] 日誌）。
+	//   1 = 在日誌檔案中記錄並輸出。
+	//   2 = 在日誌檔案中記錄並輸出，並且將內容回傳給白名單 IP 使用者。
+	//   3 = 在日誌檔案中記錄並輸出，並且將內容回傳給所有使用者。
+	//   4 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給白名單 IP 使用者。
+	//   5 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給所有使用者。
+	ErrorInfoShow *int `json:"error_info_show,omitempty" yaml:"error_info_show,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。

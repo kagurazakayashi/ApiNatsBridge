@@ -20,6 +20,7 @@
 - **TLS/HTTPS 支援** — 設定憑證即可啟用 HTTPS
 - **`/ping` 端點** — 透過 NATS 微服務實作的延遲測量端點
 - **IP 白名單錯誤詳細資訊** — 僅允許指定 IP 檢視詳細錯誤資訊，正式環境僅回傳通用錯誤
+- **微服務錯誤資訊顯示控制** — 透過 `error_info_show` 參數設定是否記錄、輸出微服務錯誤內容，以及是否將內容回傳給白名單 IP 使用者或所有使用者
 - **多國語言支援 (i18n/l10n)** — 日誌、HTTP 回應、CLI 說明文字皆支援多語言，可在設定檔中分別設定（支援 en、zh、zh_Hant、ja）
 - **優雅關閉** — 攔截系統訊號後有序關閉 HTTP 伺服器、取消 NATS 訂閱並中斷連線
 
@@ -393,6 +394,18 @@ bridge:
     - "127.0.0.1"
     - "::1"
 
+  # 微服務回傳 JSON 中 HTTP 狀態碼的全域預設鍵名（可按路由覆蓋）
+  http_code_key: "status_code"
+  # 微服務回傳 JSON 中錯誤碼的全域預設鍵名（可按路由覆蓋）
+  error_code_key: "error_code"
+  # 回應本文 JSON Schema 驗證的全域預設規則（可按路由覆蓋）
+  # response_schema_body: {}
+  # 錯誤回應本文 JSON Schema 驗證的全域預設規則（可按路由覆蓋）
+  # response_error_schema_body: {}
+  # 微服務錯誤資訊顯示模式的全域預設值（可按路由覆蓋）
+  #   0=不記錄、1=記錄+輸出、2=記錄+輸出+白名單可見、3=記錄+輸出+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見
+  error_info_show: 1
+
   # 全域請求欄位長度限制（0 或省略表示不限制）
   limits:
     path:
@@ -452,6 +465,7 @@ routes:
           type: string
     # http_code_key: "status_code"  # 回應 JSON 中 HTTP 狀態碼的鍵名，不指定時預設 200（可選）
     # error_code_key: "error_code"  # 回應 JSON 中錯誤碼的鍵名，檢測到時觸發 response_error_schema_body 驗證（可選）
+    # error_info_show: 2  # 錯誤資訊顯示模式（覆蓋 bridge 層級）；0=不記錄、1=記錄、2=記錄+白名單可見、3=記錄+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見（可選）
 ```
 
 ### 設定項詳解
@@ -496,7 +510,12 @@ routes:
 | `timezone`         | string   | 時區，影響所有日誌時間戳記，如 `"Asia/Shanghai"` 或 `"8"` |
 | `cdnheader`        | []string | CDN 真實 IP 標頭優先級清單                                |
 | `error_detail_ips` | []string | 允許檢視詳細錯誤的 IP 白名單                              |
-| `limits`           | object   | 全域請求欄位長度限制                                      |
+| `http_code_key`    | string   | 微服務回傳 JSON 中 HTTP 狀態碼的全域預設鍵名；可按路由覆蓋 |
+| `error_code_key`   | string   | 微服務回傳 JSON 中錯誤碼的全域預設鍵名；可按路由覆蓋       |
+| `response_schema_body`      | object | 回應本文 JSON Schema 驗證的全域預設規則；可按路由覆蓋   |
+| `response_error_schema_body`| object | 錯誤回應本文 JSON Schema 驗證的全域預設規則；可按路由覆蓋 |
+| `error_info_show`  | int      | 微服務錯誤資訊顯示模式的全域預設值；可按路由覆蓋（0=不記錄、1=記錄+輸出、2=記錄+輸出+白名單可見、3=記錄+輸出+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見） |
+| `limits`           | object   | 全域請求欄位長度限制                                       |
 | `response_limits`  | object   | 全域回應欄位長度限制（結構同 limits）                     |
 
 ##### `bridge.language` — 多國語言設定
@@ -580,6 +599,7 @@ routes:
 | `response_error_schema_body` | object   | -              | 錯誤回應主體 JSON Schema 驗證（檢測到 error_code_key 時使用，未設定則沿用 response_schema_body） |
 | `http_code_key`    | string   | ""（預設 200）   | 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（100-599）；指定後回傳用戶端時會從回應中移除此鍵 |
 | `error_code_key`   | string   | ""（不啟用）    | 微服務回傳 JSON 中表示錯誤碼的鍵名（int32）；檢測到此鍵時觸發 response_error_schema_body 驗證 |
+| `error_info_show`  | int      | 0               | 微服務錯誤資訊顯示模式（覆蓋 bridge 層級）；0=不記錄、1=記錄、2=記錄+白名單可見、3=記錄+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見 |
 
 #### `return_fields` 可選值
 

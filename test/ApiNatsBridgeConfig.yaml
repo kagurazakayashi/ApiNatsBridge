@@ -94,6 +94,12 @@ bridge:
     - "127.0.0.1" # IPv4 本機地址
     - "::1" # IPv6 本機地址
 
+  # http_code_key: "" # 微服務回傳 JSON 中表示 HTTP 狀態碼的全域預設鍵名（留空則路由未指定時預設 200）
+  # error_code_key: "" # 微服務回傳 JSON 中表示錯誤碼的全域預設鍵名（留空則不啟用）
+  # response_schema_body: {} # 回應本文的 JSON Schema 驗證全域預設規則（留空則不限制）
+  # response_error_schema_body: {} # 錯誤回應本文的 JSON Schema 驗證全域預設規則（留空則不限制）
+  # error_info_show: 1 # 微服務錯誤資訊的顯示模式全域預設值（0=不記錄、1=記錄並輸出、2=記錄+輸出+回傳白名單、3=記錄+輸出+回傳所有、4=不記錄+回傳白名單、5=不記錄+回傳所有）
+
   # 請求欄位長度限制（全域層級，0 或省略表示不限制，可被路由層級覆蓋）
   limits:
     path:
@@ -183,3 +189,4 @@ routes:
           type: integer # 類型為整數（伺服器系統毫秒時間戳）
     # http_code_key: "" # 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（留空則不啟用）
     # error_code_key: "" # 微服務回傳 JSON 中表示錯誤碼的鍵名（檢測到此鍵時觸發 response_error_schema_body 驗證）
+    # error_info_show: 0 # 微服務錯誤資訊的顯示模式（覆蓋 bridge 層的全域設定；0=不記錄、1=記錄+輸出、2=記錄+輸出+回傳白名單、3=記錄+輸出+回傳所有、4=不記錄+回傳白名單、5=不記錄+回傳所有）
