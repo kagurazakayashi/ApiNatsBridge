@@ -144,6 +144,13 @@ type BridgeConfig struct {
 	// Timezone 定義日誌或時間處理使用的時區，支援 IANA 時區名稱，例如 Asia/Taipei，或小時偏移，例如 8、-5。
 	Timezone string `json:"timezone,omitempty" yaml:"timezone,omitempty"`
 
+	// TimeFormat 定義日誌時間日期的顯示格式。
+	//
+	// 預設值為 "YYYY-MM-DD HH:mm:ss"（Go 格式字串為 "2006-01-02 15:04:05"）。
+	// 若設為空字串 ""，控制台輸出將不顯示時間日期，但日誌檔案仍會依照預設格式記錄時間日期。
+	// 可被單一路由設定中的同名欄位覆蓋。
+	TimeFormat *string `json:"time_format,omitempty" yaml:"time_format,omitempty"`
+
 	// CdnHeader 定義 CDN 或反向代理傳遞真實用戶端 IP 的標頭清單。
 	CdnHeader []string `json:"cdnheader" yaml:"cdnheader"`
 
@@ -257,6 +264,13 @@ type RouteConfig struct {
 	//   4 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給白名單 IP 使用者。
 	//   5 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給所有使用者。
 	ErrorInfoShow *int `json:"error_info_show,omitempty" yaml:"error_info_show,omitempty"`
+
+	// TimeFormat 定義此路由的日誌時間日期顯示格式。
+	//
+	// 若未設定（nil），則使用 bridge 層 TimeFormat 設定。
+	// 若 bridge 層亦未設定，則使用程式預設值 "YYYY-MM-DD HH:mm:ss"。
+	// 若設為空字串 ""，控制台輸出將不顯示時間日期，但日誌檔案仍會依照預設格式記錄時間日期。
+	TimeFormat *string `json:"time_format,omitempty" yaml:"time_format,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。

@@ -75,6 +75,12 @@ bridge:
   # 時區，影響所有日誌時間戳，支援 IANA 時區名稱（如 Asia/Shanghai、America/New_York）或小時偏移（如 8、-5）
   timezone: "Asia/Shanghai"
 
+  # 日誌時間日期顯示格式
+  #   - 預設值 "2006-01-02 15:04:05"（YYYY-MM-DD HH:mm:ss）
+  #   - 設為空字串 ""：控制台不顯示時間日期，日誌檔案仍使用預設格式
+  #   - 可被路由級別 time_format 覆蓋
+  # time_format: ""
+
   # CDN 服務商傳遞真實 IP 的專屬標頭清單, 若 CDN 僅使用 X-Forwarded-For，則無需加入
   cdnheader:
     - "CF-Connecting-IP" # Cloudflare
@@ -190,3 +196,4 @@ routes:
     # http_code_key: "" # 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（留空則不啟用）
     # error_code_key: "" # 微服務回傳 JSON 中表示錯誤碼的鍵名（檢測到此鍵時觸發 response_error_schema_body 驗證）
     # error_info_show: 0 # 微服務錯誤資訊的顯示模式（覆蓋 bridge 層的全域設定；0=不記錄、1=記錄+輸出、2=記錄+輸出+回傳白名單、3=記錄+輸出+回傳所有、4=不記錄+回傳白名單、5=不記錄+回傳所有）
+    # time_format: ""   # 日誌時間日期顯示格式（覆蓋 bridge 層的全域設定；空字串表示控制台不顯示時間但日誌檔案仍記錄）

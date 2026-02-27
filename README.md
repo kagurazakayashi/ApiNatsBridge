@@ -373,6 +373,14 @@ bridge:
   # Timezone, affects all log timestamps; supports IANA timezone names (e.g., Asia/Shanghai) or hour offsets (e.g., 8, -5)
   timezone: "Asia/Shanghai"
 
+  # Log timestamp format; Go reference time: 2006-01-02 15:04:05
+  #   Default: "2006-01-02 15:04:05" (YYYY-MM-DD HH:mm:ss)
+  #   Empty "": console output omits timestamps, but log files still use the default format
+  #   Custom: e.g., "15:04:05" (time only), "01/02 15:04:05" (MM/DD HH:mm:ss)
+  #   Overridable per route by route-level time_format
+  # time_format: ""                    # Empty: console without timestamps
+  time_format: "2006-01-02 15:04:05" # Default: YYYY-MM-DD HH:mm:ss
+
   # CDN real IP header list (ordered by priority)
   # Used to extract the client's real IP address from CDN proxy requests
   cdnheader:
@@ -508,6 +516,7 @@ routes:
 | `language`         | object   | Multi-language configuration (see below)                               |
 | `log`              | object   | Log output configuration (see below)                                   |
 | `timezone`         | string   | Timezone, affects all log timestamps, e.g., `"Asia/Shanghai"` or `"8"` |
+| `time_format`      | string   | Log timestamp format; default `"2006-01-02 15:04:05"` (YYYY-MM-DD HH:mm:ss); empty `""` hides console timestamps but log files still use the default format; overridable per route |
 | `cdnheader`        | []string | CDN real IP header priority list                                       |
 | `error_detail_ips` | []string | IP whitelist allowed to view detailed errors                           |
 | `http_code_key`    | string   | Global default key for HTTP status code in microservice response JSON; overridable per route |
@@ -622,6 +631,7 @@ routes:
 | `http_code_key`    | string   | "" (defaults to 200) | Microservice response JSON key for HTTP status code (100-599); when specified, this key is removed from the response before returning to client |
 | `error_code_key`   | string   | "" (disable)    | Microservice response JSON key for error code (int32); triggers response_error_schema_body when detected |
 | `error_info_show`  | int      | 0               | Microservice error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all |
+| `time_format`      | string   | -               | Route-level log timestamp format (overrides bridge level); same semantics as bridge-level `time_format` |
 
 #### `return_fields` Options
 

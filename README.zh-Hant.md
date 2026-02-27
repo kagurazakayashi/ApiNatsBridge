@@ -373,6 +373,14 @@ bridge:
   # 時區，影響所有日誌時間戳記，支援 IANA 時區名稱（如 Asia/Shanghai）或小時偏移（如 8、-5）
   timezone: "Asia/Shanghai"
 
+  # 日誌時間日期顯示格式；Go 參照時間格式：2006-01-02 15:04:05
+  #   預設值："2006-01-02 15:04:05"（YYYY-MM-DD HH:mm:ss）
+  #   設為空字串 ""：控制台不顯示時間日期，但日誌檔案仍依照預設格式記錄
+  #   自訂格式如："15:04:05"（僅時間）、"01/02 15:04:05"（月/日 時:分:秒）
+  #   可被路由層級 time_format 覆蓋
+  # time_format: ""                    # 空字串：控制台不顯示時間
+  time_format: "2006-01-02 15:04:05" # 預設值：YYYY-MM-DD HH:mm:ss
+
   # CDN 真實 IP 標頭清單（按優先級排列）
   # 用於從 CDN 代理請求中擷取用戶端真實 IP 位址
   cdnheader:
@@ -508,6 +516,7 @@ routes:
 | `language`         | object   | 多國語言設定（詳見下方）                                  |
 | `log`              | object   | 日誌輸出設定（詳見下方）                                  |
 | `timezone`         | string   | 時區，影響所有日誌時間戳記，如 `"Asia/Shanghai"` 或 `"8"` |
+| `time_format`      | string   | 日誌時間日期顯示格式；預設 `"2006-01-02 15:04:05"`（YYYY-MM-DD HH:mm:ss）；設為空字串 `""` 時控制台不顯示時間但日誌檔案仍使用預設格式；可按路由覆蓋 |
 | `cdnheader`        | []string | CDN 真實 IP 標頭優先級清單                                |
 | `error_detail_ips` | []string | 允許檢視詳細錯誤的 IP 白名單                              |
 | `http_code_key`    | string   | 微服務回傳 JSON 中 HTTP 狀態碼的全域預設鍵名；可按路由覆蓋 |
@@ -600,6 +609,7 @@ routes:
 | `http_code_key`    | string   | ""（預設 200）   | 微服務回傳 JSON 中表示 HTTP 狀態碼的鍵名（100-599）；指定後回傳用戶端時會從回應中移除此鍵 |
 | `error_code_key`   | string   | ""（不啟用）    | 微服務回傳 JSON 中表示錯誤碼的鍵名（int32）；檢測到此鍵時觸發 response_error_schema_body 驗證 |
 | `error_info_show`  | int      | 0               | 微服務錯誤資訊顯示模式（覆蓋 bridge 層級）；0=不記錄、1=記錄、2=記錄+白名單可見、3=記錄+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見 |
+| `time_format`      | string   | -               | 路由層級日誌時間日期顯示格式（覆蓋 bridge 層級）；語義同 bridge 層的 `time_format` |
 
 #### `return_fields` 可選值
 

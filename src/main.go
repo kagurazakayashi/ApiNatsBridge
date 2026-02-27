@@ -30,8 +30,8 @@ func Run() {
 	// 依橋接器設定初始化多國語言。
 	InitL10n(bridgeConfig.Language)
 
-	// 依橋接器設定初始化日誌與時區。
-	InitLogConfig(bridgeConfig.Log, bridgeConfig.Timezone)
+	// 依橋接器設定初始化日誌、時區與時間格式。
+	InitLogConfig(bridgeConfig.Log, bridgeConfig.Timezone, bridgeConfig.TimeFormat)
 
 	// 輸出已載入的路由數量與路由對應關係，方便啟動時確認設定狀態。
 	LogMain(LLog.LogLoadRouteCount(), len(routes))
@@ -54,7 +54,7 @@ func Run() {
 	}
 
 	// 建立橋接處理器，負責將 HTTP 請求依路由設定轉送至對應的 NATS subject。
-	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ResponseLimits, bridgeConfig.ErrorDetailIPs, bridgeConfig.HTTPCodeKey, bridgeConfig.ErrorCodeKey, bridgeConfig.ResponseSchemaBody, bridgeConfig.ResponseErrorSchemaBody, bridgeConfig.ErrorInfoShow)
+	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ResponseLimits, bridgeConfig.ErrorDetailIPs, bridgeConfig.HTTPCodeKey, bridgeConfig.ErrorCodeKey, bridgeConfig.ResponseSchemaBody, bridgeConfig.ResponseErrorSchemaBody, bridgeConfig.ErrorInfoShow, bridgeConfig.TimeFormat)
 
 	// 建立 HTTP API 伺服器，並掛載橋接處理器作為請求入口。
 	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, handler.Handle, HTTPLogger)

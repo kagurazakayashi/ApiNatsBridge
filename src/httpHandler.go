@@ -312,6 +312,12 @@ type BridgeHandler struct {
 
 	// routeErrorInfoShow 是各路徑的錯誤資訊顯示模式。
 	routeErrorInfoShow map[string]*int
+
+	// bridgeTimeFormat 是橋接層全域預設的日誌時間日期格式。
+	bridgeTimeFormat *string
+
+	// routeTimeFormats 是各路徑的日誌時間日期格式。
+	routeTimeFormats map[string]*string
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -319,7 +325,7 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string) *BridgeHandler {
 
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
@@ -338,6 +344,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeResponseErrorSchemaMaps := make(map[string]map[string]interface{})
 	routeResponseLimitsMap := make(map[string]*LimitRule)
 	routeErrorInfoShowMap := make(map[string]*int)
+	routeTimeFormatsMap := make(map[string]*string)
 
 	// 將錯誤詳細資訊白名單轉為 set，方便請求處理時 O(1) 查詢。
 	errorIPSet := make(map[string]struct{}, len(errorDetailIPs))
@@ -402,6 +409,11 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		// 保存此路由的錯誤資訊顯示模式。
 		if r.ErrorInfoShow != nil {
 			routeErrorInfoShowMap[r.Path] = r.ErrorInfoShow
+		}
+
+		// 保存此路由的日誌時間日期格式。
+		if r.TimeFormat != nil {
+			routeTimeFormatsMap[r.Path] = r.TimeFormat
 		}
 
 		// 建立並編譯請求本文 JSON Schema。
@@ -502,6 +514,8 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		bridgeResponseErrorSchemaBody: bridgeResponseErrorSchemaBody,
 		bridgeErrorInfoShow:          bridgeErrorInfoShow,
 		routeErrorInfoShow:           routeErrorInfoShowMap,
+		bridgeTimeFormat:             bridgeTimeFormat,
+		routeTimeFormats:             routeTimeFormatsMap,
 	}
 }
 
@@ -549,6 +563,14 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 
 	// 優先檢查是否命中設定檔中的路由。
 	if natsSubject, ok := h.routes[req.Path]; ok {
+		// 解析此路由有效的日誌時間日期格式並套用。
+		effectiveTimeFormat := h.bridgeTimeFormat
+		if rt, has := h.routeTimeFormats[req.Path]; has {
+			effectiveTimeFormat = rt
+		}
+		SetCurrentTimeFormat(effectiveTimeFormat)
+		defer SetCurrentTimeFormat(h.bridgeTimeFormat)
+
 		// 若路由設定了允許方法，則檢查目前 HTTP Method 是否被允許。
 		if allowed, hasMethods := h.routeMethods[req.Path]; hasMethods && len(allowed) > 0 {
 			if _, ok := allowed[req.Method]; !ok {

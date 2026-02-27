@@ -40,6 +40,16 @@ var logFilePath string
 // 所有檔案寫入操作都應透過此 mutex 序列化，避免多行日誌內容交錯。
 var fileMu sync.Mutex
 
+// defaultTimeFormat 定義控制台與日誌檔案使用的預設時間日期格式。
+const defaultTimeFormat = "2006-01-02 15:04:05"
+
+// logConsoleTimeFormat 保存控制台輸出使用的時間日期格式。
+// 設為空字串時控制台不顯示時間日期。
+var logConsoleTimeFormat = defaultTimeFormat
+
+// logFileTimeFormat 保存日誌檔案使用的時間日期格式。
+var logFileTimeFormat = defaultTimeFormat
+
 // InitLogConfig 初始化日誌設定。
 //
 // 此函式會設定全域日誌設定、時區、輸出等級，並依照設定決定是否清空既有日誌檔案。
@@ -50,9 +60,16 @@ var fileMu sync.Mutex
 // 參數：
 //   - cfg：橋接服務日誌設定。
 //   - timezone：日誌時間戳使用的時區。
-func InitLogConfig(cfg *BridgeLogConfig, timezone string) {
+//   - timeFormat：日誌時間日期顯示格式，nil 時使用預設值 "2006-01-02 15:04:05"。
+//     空字串 "" 表示控制台不顯示時間日期，但日誌檔案仍使用預設格式。
+func InitLogConfig(cfg *BridgeLogConfig, timezone string, timeFormat *string) {
 	logConfig = cfg
 	logTimezone = timezone
+	consoleFmt, fileFmt := resolveTimeFormat(timeFormat)
+	logConsoleTimeFormat = consoleFmt
+	logFileTimeFormat = fileFmt
+	nyalog.SetTimeFormat(consoleFmt)
+
 	if cfg == nil {
 		return
 	}
@@ -69,6 +86,44 @@ func InitLogConfig(cfg *BridgeLogConfig, timezone string) {
 			os.WriteFile(logFilePath, nil, 0644)
 		}
 	}
+}
+
+// resolveTimeFormat 根據設定的 *string 解析控制台與檔案的實際時間格式。
+//
+// 輸入格式會自動透過 nyalog.ConvertTimeFormat 轉換，
+// 因此設定檔中可使用 YYYY-MM-DD HH:mm:ss 或 2006-01-02 15:04:05 兩種寫法。
+//
+// 參數：
+//   - tf：時間格式指標，nil 表示使用預設值。
+//
+// 回傳：
+//   - consoleFormat：控制台輸出使用的格式（空字串表示不顯示時間），已轉換為 Go 參照時間格式。
+//   - fileFormat：日誌檔案使用的格式，已轉換為 Go 參照時間格式（永遠不會為空）。
+func resolveTimeFormat(tf *string) (consoleFormat string, fileFormat string) {
+	if tf == nil {
+		return defaultTimeFormat, defaultTimeFormat
+	}
+	if *tf == "" {
+		return "", defaultTimeFormat
+	}
+	return nyalog.ConvertTimeFormat(*tf), nyalog.ConvertTimeFormat(*tf)
+}
+
+// SetCurrentTimeFormat 設定目前日誌輸出的時間日期格式。
+//
+// 此函式用於支援路由層級只對特定路徑生效的 time_format 覆蓋。
+// 控制台格式會同步至 nyalog 以便彩色輸出也反映變更。
+//
+// 參數：
+//   - tf：時間格式指標，nil 時恢復為 InitLogConfig 設定的值。
+func SetCurrentTimeFormat(tf *string) {
+	if tf == nil {
+		nyalog.SetTimeFormat(logConsoleTimeFormat)
+		return
+	}
+	consoleFmt, _ := resolveTimeFormat(tf)
+	logConsoleTimeFormat = consoleFmt
+	nyalog.SetTimeFormat(consoleFmt)
 }
 
 // truncateLogFiles 清空設定中指定的所有日誌檔案。
@@ -143,10 +198,15 @@ func stdoutLog(level nyalog.LogLevel, nowLevel nyalog.LogLevel, color nyalog.Con
 		nyalog.LogCC(level, nowLevel, color, obj...)
 	} else {
 		loc := resolveTimeLocation(logTimezone)
-		ts := time.Now().In(loc).Format("2006-01-02 15:04:05")
+		ts := time.Now().In(loc).Format(logConsoleTimeFormat)
 		levelChar := nowLevel.String()
-		prefix := fmt.Sprintf("[%s %s]", levelChar, ts)
-		parts := []string{prefix}
+		var parts []string
+		if logConsoleTimeFormat != "" {
+			prefix := fmt.Sprintf("[%s %s]", levelChar, ts)
+			parts = append(parts, prefix)
+		} else {
+			parts = append(parts, fmt.Sprintf("[%s]", levelChar))
+		}
 		for _, o := range obj {
 			parts = append(parts, fmt.Sprint(o))
 		}
@@ -162,6 +222,8 @@ func stdoutLog(level nyalog.LogLevel, nowLevel nyalog.LogLevel, color nyalog.Con
 // 寫入格式為：
 //
 //	YYYY-MM-DD HH:MM:SS [PREFIX] message
+//
+// 時間格式由 logFileTimeFormat 變數控制。
 //
 // 參數：
 //   - filePath：日誌檔案路徑。
@@ -185,7 +247,7 @@ func writeToFile(filePath string, color nyalog.ConsoleColor, prefix string, msg 
 	defer f.Close()
 
 	loc := resolveTimeLocation(logTimezone)
-	ts := time.Now().In(loc).Format("2006-01-02 15:04:05")
+	ts := time.Now().In(loc).Format(logFileTimeFormat)
 	line := fmt.Sprintf("%s %s %s\n", ts, prefix, msg)
 	f.WriteString(line)
 }
