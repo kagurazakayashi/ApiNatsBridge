@@ -50,7 +50,10 @@
 | `[NATS]`        | `src/natsLogger.go` | Green  | NATS 客户端连接与事件 |
 | `[BRIDGE]`      | `src/logger.go`     | Yellow | 桥接路由与转发日志    |
 | `[HTTP]`        | `src/logger.go`     | Blue   | HTTP 请求日志行       |
-| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP 服务器运行时统计 |
+| `[HTTPINFO]`    | `src/logger.go`     | Blue   | HTTP 头、Cookie 详情（调试） |
+| `[HTTPBODY]`    | `src/logger.go`     | Blue   | HTTP 请求/响应正文（调试）   |
+| `[NATSBODY]`    | `src/logger.go`     | Green  | NATS 请求/回复载荷（调试）   |
+| `[STATUS]`      | `src/logger.go`     | Purple | 定期 HTTP+NATS 运行时统计    |
 | `[MODULE]`      | `src/logger.go`     | Cyan   | 通用模块日志          |
 | `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 连接错误         |
 | `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP 服务器错误       |
@@ -265,21 +268,17 @@ chmod +x build.sh
 
 | 参数        | 说明                                                                       |
 | ----------- | -------------------------------------------------------------------------- |
-| `-c <路径>` | 指定 YAML 配置文件路径。若未指定，默认读取与可执行文件同名的 `.yaml` 文件  |
-| `-v`        | 详细模式。输出完整的请求/响应数据（标头、参数、Cookie、Schema 校验错误等） |
-| `-o <路径>` | 将所有日志输出到指定文件（同时仍会输出到控制台和各模块日志文件）           |
+| `-c <路径>` | 指定 YAML 配置文件路径，如果不指定则默认为与可执行文件同名的 `.yaml` 文件 |
+| `-o <路径>` | 将所有日志输出到指定文件（除控制台和各模块独立日志文件外）               |
 
 ### 启动示例
 
 ```bash
-# 使用默认配置文件（与可执行文件同名的 .yaml）
+# 使用默认配置文件（与可执行文件同名的 .yaml 文件）
 ./ApiNatsBridge
 
 # 指定配置文件
 ./ApiNatsBridge -c /etc/apibridge/config.yaml
-
-# 详细模式
-./ApiNatsBridge -c config.yaml -v
 
 # 将所有日志输出到统一文件
 ./ApiNatsBridge -c config.yaml -o ../logs/all.log
@@ -357,7 +356,7 @@ bridge:
   # 日志输出配置
   log:
     stdout: true # 是否同时输出到控制台，设为 false 则仅写入日志文件
-    debug: true # 是否启用调试等级日志，设为 false 则仅输出 Info 及以上等级
+    debug: ["HTTP", "NATS", "LIMIT"] # 调试模式：空数组 [] = 不启用调试；可选值：HTTP、NATS、LIMIT
     overwrite: false # 是否使用覆盖模式，设为 true 则启动时清空现有日志文件，设为 false 或不提供则仅追加
     color: true # 是否使用彩色控制台输出，设为 true 或不提供则使用彩色，设为 false 则纯文字
     files:
@@ -367,7 +366,7 @@ bridge:
       bridge: "logs/bridge.log" # 桥接路由与转发日志
       http: "logs/http.log" # HTTP 请求日志
       nats: "logs/nats.log" # NATS 客户端事件日志
-      httpstat: "logs/httpstat.log" # HTTP 服务器运行统计日志
+      status: "logs/status.log" # HTTP+NATS 状态统计日志
       module: "logs/module.log" # 通用模块日志
 
   # 时区，影响所有日志时间戳，支持 IANA 时区名称（如 Asia/Shanghai）或小时偏移（如 8、-5）
@@ -572,9 +571,10 @@ routes:
 | 配置项      | 类型   | 说明                                                                  |
 | ----------- | ------ | --------------------------------------------------------------------- |
 | `stdout`    | bool   | 是否同时输出到控制台，`false` 则仅写文件                              |
-| `debug`     | bool   | 是否启用调试等级日志，`false` 仅 Info+                                |
+| `debug`     | []string | 调试模式标志数组；空 `[]` = 仅 Info+。可选：`"HTTP"`（完整HTTP流量）、`"NATS"`（完整NATS流量）、`"LIMIT"`（被拒绝请求的违规详情） |
 | `overwrite` | bool   | 是否覆盖模式，`true` 则启动时清空现有日志文件，`false` 或不提供仅追加 |
 | `color`     | bool   | 是否彩色控制台输出，`true` 或不提供则彩色，`false` 则纯文字           |
+| `status_interval_seconds` | int | STATUS 日志输出间隔秒数；默认 60 秒                                        |
 | `files`     | object | 各模块独立日志文件路径（详见下方）                                    |
 
 ##### `bridge.log.files` — 模块日志文件路径
@@ -585,7 +585,7 @@ routes:
 | `bridge`   | string | 桥接路由与转发日志文件路径      |
 | `http`     | string | HTTP 请求日志文件路径           |
 | `nats`     | string | NATS 客户端事件日志文件路径     |
-| `httpstat` | string | HTTP 服务器运行统计日志文件路径 |
+| `status`   | string | HTTP+NATS 状态统计日志文件路径  |
 | `module`   | string | 通用模块日志文件路径            |
 
 > 日志文件路径为相对或绝对路径均可。目录不存在时会自动创建。

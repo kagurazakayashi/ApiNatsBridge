@@ -2,7 +2,7 @@
 //
 // 此檔案定義全域日誌設定管理與多個模組專用日誌函式，
 // 包含主流程（MAIN）、橋接路由（BRIDGE）、HTTP 請求（HTTP）、
-// HTTP 統計（HTTPSTAT）與通用模組（MODULE）的日誌輸出能力，
+// 狀態統計（STATUS）與通用模組（MODULE）的日誌輸出能力，
 // 並支援時區設定、檔案截斷、同步寫入及彩色控制台輸出。
 package src
 
@@ -18,14 +18,46 @@ import (
 	"github.com/kagurazakayashi/libNyaruko_Go/nyalog"
 )
 
+// consoleTruncateLen 定義控制台輸出時對傳輸內容的最大顯示長度。
+// 日誌檔案中仍會記錄完整內容，僅控制台顯示會被截斷。
+const consoleTruncateLen = 500
+
 // logLevel 定義目前應用程式使用的全域日誌等級。
-// 預設值為 Debug；若設定檔未啟用 Debug 模式，初始化時會降為 Info。
+// 預設值為 Debug；若設定檔未啟用任何 debug 模式，初始化時會降為 Info。
 // 此變數會影響 stdoutLog 輸出時的最低可見日誌等級。
 var logLevel = nyalog.Debug
 
 // logConfig 保存橋接服務的全域日誌設定。
 // 若為 nil，代表尚未載入外部設定，日誌系統會採用預設輸出行為。
 var logConfig *BridgeLogConfig
+
+// debugModes 保存目前啟用的除錯模式集合。
+// 可包含的值：HTTP、NATS、LIMIT。
+// 若集合為空，代表未啟用任何除錯模式。
+var debugModes map[string]struct{}
+
+// HasDebug 檢查指定的除錯模式是否已啟用。
+func HasDebug(mode string) bool {
+	if debugModes == nil {
+		return false
+	}
+	_, ok := debugModes[mode]
+	return ok
+}
+
+// HasDebugHttp 檢查 HTTP 通訊除錯模式是否已啟用。
+func HasDebugHttp() bool { return HasDebug("HTTP") }
+
+// HasDebugNats 檢查 NATS 通訊除錯模式是否已啟用。
+func HasDebugNats() bool { return HasDebug("NATS") }
+
+// HasDebugLimit 檢查 LIMIT 除錯模式（違規攔截詳情）是否已啟用。
+func HasDebugLimit() bool { return HasDebug("LIMIT") }
+
+// DebugModeEnabled 檢查是否有任何除錯模式已啟用。
+func DebugModeEnabled() bool {
+	return len(debugModes) > 0
+}
 
 // logTimezone 保存日誌時間戳使用的時區字串。
 // 可接受 IANA 時區名稱，例如 "Asia/Taipei"，或 -12 到 12 的整數 UTC 偏移。
@@ -73,7 +105,11 @@ func InitLogConfig(cfg *BridgeLogConfig, timezone string, timeFormat *string) {
 	if cfg == nil {
 		return
 	}
-	if !cfg.Debug {
+	debugModes = make(map[string]struct{})
+	for _, mode := range cfg.Debug {
+		debugModes[mode] = struct{}{}
+	}
+	if !DebugModeEnabled() {
 		logLevel = nyalog.Info
 	}
 	loc := resolveTimeLocation(timezone)
@@ -128,7 +164,7 @@ func SetCurrentTimeFormat(tf *string) {
 
 // truncateLogFiles 清空設定中指定的所有日誌檔案。
 //
-// 此函式會依序處理 main、bridge、HTTP、NATS、HTTP 統計與 module 日誌檔案。
+// 此函式會依序處理 main、bridge、HTTP、NATS、status 與 module 日誌檔案。
 // 若檔案路徑為空字串，則略過該項目。
 // 若目標目錄不存在，會自動建立。
 // 寫入 nil 內容會將既有檔案截斷為空檔案。
@@ -141,7 +177,7 @@ func truncateLogFiles(cfg *BridgeLogConfig) {
 		cfg.Files.Bridge,
 		cfg.Files.HTTP,
 		cfg.Files.NATS,
-		cfg.Files.HTTPStat,
+		cfg.Files.Status,
 		cfg.Files.Module,
 	}
 	for _, p := range filePaths {
@@ -181,8 +217,9 @@ func resolveTimeLocation(tz string) *time.Location {
 	return time.UTC
 }
 
-// stdoutLog 將日誌輸出到標準錯誤輸出。
+// stdoutLog 將日誌輸出到標準輸出或標準錯誤輸出。
 //
+// 錯誤等級（nyalog.Error）會輸出到 stderr，其餘等級輸出到 stdout。
 // 若設定允許彩色輸出，會使用 nyalog 的彩色輸出函式。
 // 若停用彩色輸出，則手動組合時間戳、等級與訊息內容後輸出。
 // 當 logConfig 為 nil、Color 為 nil，或 Color 指向 true 時，皆視為啟用彩色輸出。
@@ -195,7 +232,11 @@ func resolveTimeLocation(tz string) *time.Location {
 func stdoutLog(level nyalog.LogLevel, nowLevel nyalog.LogLevel, color nyalog.ConsoleColor, obj ...interface{}) {
 	useColor := logConfig == nil || logConfig.Color == nil || *logConfig.Color
 	if useColor {
-		nyalog.LogCC(level, nowLevel, color, obj...)
+		if nowLevel == nyalog.Error {
+			nyalog.LogCCStream(level, nowLevel, color, os.Stderr, obj...)
+		} else {
+			nyalog.LogCCStream(level, nowLevel, color, os.Stdout, obj...)
+		}
 	} else {
 		loc := resolveTimeLocation(logTimezone)
 		ts := time.Now().In(loc).Format(logConsoleTimeFormat)
@@ -210,7 +251,12 @@ func stdoutLog(level nyalog.LogLevel, nowLevel nyalog.LogLevel, color nyalog.Con
 		for _, o := range obj {
 			parts = append(parts, fmt.Sprint(o))
 		}
-		fmt.Fprintln(os.Stderr, strings.Join(parts, " "))
+		line := strings.Join(parts, " ")
+		if nowLevel == nyalog.Error {
+			fmt.Fprintln(os.Stderr, line)
+		} else {
+			fmt.Fprintln(os.Stdout, line)
+		}
 	}
 }
 
@@ -282,7 +328,7 @@ func LogMain(format string, a ...interface{}) {
 //   - MAIN
 //   - NATS
 //   - HTTP
-//   - HTTPSTAT
+//   - STATUS
 //   - BRIDGE
 //   - MODULE
 //
@@ -305,8 +351,8 @@ func LogError(module string, format string, a ...interface{}) {
 			filePath = logConfig.Files.NATS
 		case "HTTP":
 			filePath = logConfig.Files.HTTP
-		case "HTTPSTAT":
-			filePath = logConfig.Files.HTTPStat
+		case "STATUS":
+			filePath = logConfig.Files.Status
 		case "BRIDGE":
 			filePath = logConfig.Files.Bridge
 		case "MODULE":
@@ -357,24 +403,93 @@ func LogHTTP(format string, a ...interface{}) {
 	writeToFile(logFilePath, nyalog.Blue, "[HTTP]", msg)
 }
 
-// LogHTTPStat 輸出 HTTP 統計相關的日誌。
+// LogStatus 輸出狀態統計日誌。
 //
-// 此類日誌通常用於記錄 HTTP 請求統計、狀態或觀測資訊。
-// 日誌會依照設定輸出到標準錯誤輸出，並可同步寫入 HTTPStat 日誌檔案。
+// 此函式用於定期輸出 HTTP 與 NATS 的連線與處理統計資訊。
+// 日誌會依照設定輸出到標準輸出，並可同步寫入 status 日誌檔案。
 // 此函式使用 nyalog.OK 等級，適合呈現統計或觀測結果類型的正常事件。
 //
 // 參數：
 //   - format：fmt.Sprintf 相容的格式字串。
 //   - a：格式化參數。
-func LogHTTPStat(format string, a ...interface{}) {
+func LogStatus(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	if logConfig == nil || logConfig.Stdout {
-		stdoutLog(logLevel, nyalog.OK, nyalog.Purple, "[HTTPSTAT]", msg)
+		stdoutLog(logLevel, nyalog.OK, nyalog.Purple, "[STATUS]", msg)
 	}
 	if logConfig != nil {
-		writeToFile(logConfig.Files.HTTPStat, nyalog.Purple, "[HTTPSTAT]", msg)
+		writeToFile(logConfig.Files.Status, nyalog.Purple, "[STATUS]", msg)
 	}
-	writeToFile(logFilePath, nyalog.Purple, "[HTTPSTAT]", msg)
+	writeToFile(logFilePath, nyalog.Purple, "[STATUS]", msg)
+}
+
+// LogHTTPInfo 輸出 HTTP 通訊詳細資訊到 HTTP 日誌檔案與控制台。
+//
+// 控制台輸出可能被截斷（受 consoleTruncateLen 限制），但日誌檔案記錄完整內容。
+// 這包含請求/回應標頭、Cookie 等非本文資訊。
+//
+// 參數：
+//   - format：fmt.Sprintf 相容的格式字串。
+//   - a：格式化參數。
+func LogHTTPInfo(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	consoleMsg := msg
+	if len(consoleMsg) > consoleTruncateLen {
+		consoleMsg = consoleMsg[:consoleTruncateLen] + "...(truncated)"
+	}
+	if logConfig == nil || logConfig.Stdout {
+		stdoutLog(logLevel, nyalog.Info, nyalog.Blue, "[HTTPINFO]", consoleMsg)
+	}
+	if logConfig != nil {
+		writeToFile(logConfig.Files.HTTP, nyalog.Blue, "[HTTPINFO]", msg)
+	}
+	writeToFile(logFilePath, nyalog.Blue, "[HTTPINFO]", msg)
+}
+
+// LogHTTPBody 輸出 HTTP 通訊本文內容到 HTTP 日誌檔案與控制台。
+//
+// 控制台輸出可能被截斷（受 consoleTruncateLen 限制），但日誌檔案記錄完整內容。
+// 這包含請求本文、回應本文等完整傳輸內容。
+//
+// 參數：
+//   - format：fmt.Sprintf 相容的格式字串。
+//   - a：格式化參數。
+func LogHTTPBody(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	consoleMsg := msg
+	if len(consoleMsg) > consoleTruncateLen {
+		consoleMsg = consoleMsg[:consoleTruncateLen] + "...(truncated)"
+	}
+	if logConfig == nil || logConfig.Stdout {
+		stdoutLog(logLevel, nyalog.Info, nyalog.Blue, "[HTTPBODY]", consoleMsg)
+	}
+	if logConfig != nil {
+		writeToFile(logConfig.Files.HTTP, nyalog.Blue, "[HTTPBODY]", msg)
+	}
+	writeToFile(logFilePath, nyalog.Blue, "[HTTPBODY]", msg)
+}
+
+// LogNatsBody 輸出 NATS 通訊本文內容到 NATS 日誌檔案與控制台。
+//
+// 控制台輸出可能被截斷（受 consoleTruncateLen 限制），但日誌檔案記錄完整內容。
+// 這包含發送到 NATS 的請求酬載以及從 NATS 接收到的回應酬載。
+//
+// 參數：
+//   - format：fmt.Sprintf 相容的格式字串。
+//   - a：格式化參數。
+func LogNatsBody(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	consoleMsg := msg
+	if len(consoleMsg) > consoleTruncateLen {
+		consoleMsg = consoleMsg[:consoleTruncateLen] + "...(truncated)"
+	}
+	if logConfig == nil || logConfig.Stdout {
+		stdoutLog(logLevel, nyalog.Info, nyalog.Green, "[NATSBODY]", consoleMsg)
+	}
+	if logConfig != nil {
+		writeToFile(logConfig.Files.NATS, nyalog.Green, "[NATSBODY]", msg)
+	}
+	writeToFile(logFilePath, nyalog.Green, "[NATSBODY]", msg)
 }
 
 // LogModule 輸出一般模組相關的資訊日誌。

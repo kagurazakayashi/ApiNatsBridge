@@ -50,7 +50,10 @@
 | `[NATS]`        | `src/natsLogger.go` | Green  | NATS クライアントの接続とイベント  |
 | `[BRIDGE]`      | `src/logger.go`     | Yellow | ブリッジルーティングと転送ログ     |
 | `[HTTP]`        | `src/logger.go`     | Blue   | HTTP リクエストログ行              |
-| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP サーバー実行時統計            |
+| `[HTTPINFO]`    | `src/logger.go`     | Blue   | HTTP ヘッダー、Cookie 詳細（デバッグ） |
+| `[HTTPBODY]`    | `src/logger.go`     | Blue   | HTTP リクエスト/レスポンスボディ（デバッグ） |
+| `[NATSBODY]`    | `src/logger.go`     | Green  | NATS リクエスト/リプライペイロード（デバッグ） |
+| `[STATUS]`      | `src/logger.go`     | Purple | 定期的 HTTP+NATS 実行時統計             |
 | `[MODULE]`      | `src/logger.go`     | Cyan   | 汎用モジュールログ                 |
 | `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 接続エラー                    |
 | `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP サーバーエラー                |
@@ -265,21 +268,17 @@ chmod +x build.sh
 
 | パラメータ  | 説明                                                                                                             |
 | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| `-c <パス>` | YAML 設定ファイルのパスを指定。未指定の場合は実行可能ファイルと同名の `.yaml` ファイルをデフォルトで読み込みます |
-| `-v`        | 詳細モード。完全なリクエスト/レスポンスデータ（ヘッダー、パラメータ、Cookie、Schema 検証エラーなど）を出力します |
-| `-o <パス>` | すべてのログを指定ファイルに出力（コンソールと各モジュールのログファイルへも引き続き出力されます）               |
+| `-c <パス>` | YAML 設定ファイルのパスを指定します。指定がない場合は、実行ファイルと同じ名前の `.yaml` ファイルがデフォルトです |
+| `-o <パス>` | すべてのログを指定ファイルに出力します（コンソールと各モジュールのログファイルに加えて）                       |
 
 ### 起動例
 
 ```bash
-# デフォルトの設定ファイルを使用（実行可能ファイルと同名の .yaml）
+# デフォルト設定ファイルを使用（実行ファイルと同じ名前の .yaml ファイル）
 ./ApiNatsBridge
 
 # 設定ファイルを指定
 ./ApiNatsBridge -c /etc/apibridge/config.yaml
-
-# 詳細モード
-./ApiNatsBridge -c config.yaml -v
 
 # すべてのログを統合ファイルに出力
 ./ApiNatsBridge -c config.yaml -o ../logs/all.log
@@ -357,7 +356,7 @@ bridge:
   # ログ出力設定
   log:
     stdout: true # コンソールにも同時出力するか、false の場合はログファイルのみに書き込み
-    debug: true # デバッグレベルのログを有効にするか、false の場合は Info 以上のみ出力
+    debug: ["HTTP", "NATS", "LIMIT"] # デバッグモード：空配列 [] = デバッグ無効；オプション：HTTP、NATS、LIMIT
     overwrite: false # 上書きモードを使用するか、true の場合は起動時に既存のログファイルをクリア、false または未指定の場合は追記のみ
     color: true # カラーコンソール出力を使用するか、true または未指定の場合はカラー、false の場合はプレーンテキスト
     files:
@@ -367,7 +366,7 @@ bridge:
       bridge: "logs/bridge.log" # ブリッジルーティングと転送ログ
       http: "logs/http.log" # HTTP リクエストログ
       nats: "logs/nats.log" # NATS クライアントイベントログ
-      httpstat: "logs/httpstat.log" # HTTP サーバー実行統計ログ
+      status: "logs/status.log" # HTTP+NATS 状態統計ログ
       module: "logs/module.log" # 汎用モジュールログ
 
   # タイムゾーン、すべてのログタイムスタンプに影響、IANA タイムゾーン名（例：Asia/Tokyo）または時間オフセット（例：9、-5）をサポート
@@ -572,9 +571,10 @@ routes:
 | 設定項目    | 型     | 説明                                                                                                          |
 | ----------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | `stdout`    | bool   | コンソールにも同時出力するか、`false` の場合はファイルのみ                                                    |
-| `debug`     | bool   | デバッグレベルのログを有効にするか、`false` の場合は Info 以上のみ                                            |
+| `debug`     | []string | デバッグモードフラグ配列；空 `[]` = Info+ のみ。オプション：`"HTTP"`（HTTP通信全体）、`"NATS"`（NATS通信全体）、`"LIMIT"`（拒否リクエストの違反詳細） |
 | `overwrite` | bool   | 上書きモードかどうか、`true` の場合は起動時に既存のログファイルをクリア、`false` または未指定の場合は追記のみ |
 | `color`     | bool   | カラーコンソール出力かどうか、`true` または未指定の場合はカラー、`false` の場合はプレーンテキスト             |
+| `status_interval_seconds` | int | STATUS ログ出力間隔秒数；デフォルト 60 秒                                                         |
 | `files`     | object | 各モジュールの個別ログファイルパス（下記参照）                                                                |
 
 ##### `bridge.log.files` — モジュールログファイルパス
@@ -585,7 +585,7 @@ routes:
 | `bridge`   | string | ブリッジルーティングと転送ログファイルパス |
 | `http`     | string | HTTP リクエストログファイルパス            |
 | `nats`     | string | NATS クライアントイベントログファイルパス  |
-| `httpstat` | string | HTTP サーバー実行統計ログファイルパス      |
+| `status`   | string | HTTP+NATS 状態統計ログファイルパス         |
 | `module`   | string | 汎用モジュールログファイルパス             |
 
 > ログファイルパスは相対パスでも絶対パスでも構いません。ディレクトリが存在しない場合は自動的に作成されます。

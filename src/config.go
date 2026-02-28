@@ -16,9 +16,6 @@ import (
 	"gopkg.in/yaml.v3"                                      // 匯入 YAML 解析套件，用於讀取設定檔內容。
 )
 
-// Verbose 表示是否啟用詳細輸出模式，由命令列參數 -v 控制。
-var Verbose bool
-
 // defaultTimeoutSeconds 定義路由未指定逾時時間時使用的預設秒數。
 //
 // 此常數會在 RouteConfig.Timeout 小於等於 0 時作為 fallback 使用，
@@ -87,8 +84,8 @@ type BridgeLogFilesConfig struct {
 	// NATS 表示 NATS 用戶端日誌檔案路徑。
 	NATS string `json:"nats,omitempty" yaml:"nats,omitempty"`
 
-	// HTTPStat 表示 HTTP 伺服器執行統計日誌檔案路徑。
-	HTTPStat string `json:"httpstat,omitempty" yaml:"httpstat,omitempty"`
+	// Status 表示狀態統計日誌檔案路徑。
+	Status string `json:"status,omitempty" yaml:"status,omitempty"`
 
 	// Module 表示通用模組日誌檔案路徑，例如 /ping 等模組輸出。
 	Module string `json:"module,omitempty" yaml:"module,omitempty"`
@@ -96,14 +93,16 @@ type BridgeLogFilesConfig struct {
 
 // BridgeLogConfig 定義橋接層日誌相關設定。
 //
-// 此設定可控制是否輸出到終端機、是否啟用 debug、
+// 此設定可控制是否輸出到終端機、是否啟用 debug 模式、
 // 是否覆寫既有日誌檔，以及是否使用彩色輸出。
 type BridgeLogConfig struct {
 	// Stdout 表示是否輸出到控制台 stdout 或 stderr；設為 false 時僅寫入檔案。
 	Stdout bool `json:"stdout" yaml:"stdout"`
 
-	// Debug 表示是否啟用除錯等級日誌；設為 false 時僅輸出 Info 及以上等級。
-	Debug bool `json:"debug" yaml:"debug"`
+	// Debug 表示要啟用的除錯模式清單；可選值：HTTP、NATS、LIMIT。
+	// 設定後即啟用除錯等級日誌，並依模式輸出對應的詳細通訊內容。
+	// 留空陣列則僅輸出 Info 及以上等級。
+	Debug []string `json:"debug" yaml:"debug"`
 
 	// Overwrite 表示是否以覆蓋模式寫入日誌檔案；設為 true 時會在啟動時清空既有日誌。
 	Overwrite bool `json:"overwrite,omitempty" yaml:"overwrite,omitempty"`
@@ -113,6 +112,9 @@ type BridgeLogConfig struct {
 
 	// Files 定義各模組的獨立日誌檔案路徑。
 	Files BridgeLogFilesConfig `json:"files,omitempty" yaml:"files,omitempty"`
+
+	// StatusIntervalSeconds 定義 STATUS 狀態日誌的輸出間隔秒數；0 或未設定時預設 60 秒。
+	StatusIntervalSeconds int `json:"status_interval_seconds,omitempty" yaml:"status_interval_seconds,omitempty"`
 }
 
 // BridgeLanguageConfig 定義各模組使用的語言設定。
@@ -345,7 +347,7 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 //
 // 支援的命令列參數：
 //   - -c：指定 YAML 設定檔路徑
-//   - -v：啟用詳細模式，記錄完整請求資料
+//   - -o：指定統一日誌檔案路徑
 //
 // 回傳值依序為：
 //   - 是否成功載入設定
@@ -356,7 +358,6 @@ func loadConfigFile(configPath string) (string, ApiNatsBridgeConfig, error) {
 func LoadConfig() (bool, *nyaapiserver.HttpAPIServerConfig, *nyanats.NatsConfig, BridgeConfig, []RouteConfig) {
 	var configPath string                                                    // 保存命令列指定或自動推導出的 YAML 設定檔路徑。
 	flag.StringVar(&configPath, "c", "", LCLI.CliFlagConfig())       // 註冊 -c 參數，用於指定設定檔路徑。
-	flag.BoolVar(&Verbose, "v", false, LCLI.CliFlagVerbose())     // 註冊 -v 參數，用於啟用詳細請求資料日誌。
 	flag.StringVar(&logFilePath, "o", "", LCLI.CliFlagOutput()) // 註冊 -o 參數，用於指定統一日誌檔案路徑。
 	flag.Parse()                                                             // 解析命令列參數，將結果寫入已註冊的變數。
 

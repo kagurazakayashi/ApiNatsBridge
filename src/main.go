@@ -67,12 +67,46 @@ func Run() {
 		}
 	}()
 
+	// 啟動定期 STATUS 日誌輸出 goroutine。
+	statusInterval := 60
+	if bridgeConfig.Log != nil && bridgeConfig.Log.StatusIntervalSeconds > 0 {
+		statusInterval = bridgeConfig.Log.StatusIntervalSeconds
+	}
+	statusStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Duration(statusInterval) * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				httpStats := nyaapiserver.GetStats()
+				natsStats := GetNatsStats().Snapshot()
+				LogStatus(LLog.LogHttpStat(),
+					httpStats.TotalRequests,
+					httpStats.CurrentConns,
+					httpStats.TotalBytesSent,
+					httpStats.TotalBytesRecv,
+					httpStats.Uptime,
+					httpStats.BlockedIPs,
+					natsStats.Requests,
+					natsStats.Replies,
+					natsStats.Errors,
+				)
+			case <-statusStop:
+				return
+			}
+		}
+	}()
+
 	// 建立系統訊號通道，監聽中斷與終止訊號，以便觸發優雅關閉。
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	// 阻塞等待結束訊號。
 	<-quit
+
+	// 停止 STATUS goroutine。
+	close(statusStop)
 
 	// 建立具 5 秒逾時的 Context，避免關閉程序無限等待。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

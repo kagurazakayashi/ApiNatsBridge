@@ -50,7 +50,10 @@
 | `[NATS]`        | `src/natsLogger.go` | Green  | NATS 用戶端連線與事件 |
 | `[BRIDGE]`      | `src/logger.go`     | Yellow | 橋接路由與轉送日誌    |
 | `[HTTP]`        | `src/logger.go`     | Blue   | HTTP 請求日誌行       |
-| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP 伺服器執行時統計 |
+| `[HTTPINFO]`    | `src/logger.go`     | Blue   | HTTP 標頭、Cookie 詳情（除錯） |
+| `[HTTPBODY]`    | `src/logger.go`     | Blue   | HTTP 請求/回應本文（除錯）    |
+| `[NATSBODY]`    | `src/logger.go`     | Green  | NATS 請求/回覆酬載（除錯）    |
+| `[STATUS]`      | `src/logger.go`     | Purple | 定期 HTTP+NATS 執行統計       |
 | `[MODULE]`      | `src/logger.go`     | Cyan   | 通用模組日誌          |
 | `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS 連線錯誤         |
 | `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP 伺服器錯誤       |
@@ -265,21 +268,17 @@ chmod +x build.sh
 
 | 參數        | 說明                                                                       |
 | ----------- | -------------------------------------------------------------------------- |
-| `-c <路徑>` | 指定 YAML 設定檔路徑。若未指定，預設讀取與可執行檔同名的 `.yaml` 檔案      |
-| `-v`        | 詳細模式。輸出完整的請求/回應資料（標頭、參數、Cookie、Schema 驗證錯誤等） |
-| `-o <路徑>` | 將所有日誌輸出到指定檔案（同時仍會輸出到主控台和各模組日誌檔案）           |
+| `-c <路徑>` | 指定 YAML 設定檔路徑，如果不指定則預設為與執行檔同名的 `.yaml` 檔案      |
+| `-o <路徑>` | 將所有日誌輸出到指定檔案（除控制台和各模組獨立日誌檔案外）               |
 
 ### 啟動範例
 
 ```bash
-# 使用預設設定檔（與可執行檔同名的 .yaml）
+# 使用預設設定檔（與執行檔同名的 .yaml 檔案）
 ./ApiNatsBridge
 
 # 指定設定檔
 ./ApiNatsBridge -c /etc/apibridge/config.yaml
-
-# 詳細模式
-./ApiNatsBridge -c config.yaml -v
 
 # 將所有日誌輸出到統一檔案
 ./ApiNatsBridge -c config.yaml -o ../logs/all.log
@@ -357,7 +356,7 @@ bridge:
   # 日誌輸出設定
   log:
     stdout: true # 是否同時輸出到主控台，設為 false 則僅寫入日誌檔案
-    debug: true # 是否啟用偵錯等級日誌，設為 false 則僅輸出 Info 及以上等級
+    debug: ["HTTP", "NATS", "LIMIT"] # 除錯模式：空陣列 [] = 不啟用除錯；可選值：HTTP、NATS、LIMIT
     overwrite: false # 是否使用覆蓋模式，設為 true 則啟動時清空現有日誌檔案，設為 false 或不提供則僅附加
     color: true # 是否使用彩色主控台輸出，設為 true 或不提供則使用彩色，設為 false 則純文字
     files:
@@ -367,7 +366,7 @@ bridge:
       bridge: "logs/bridge.log" # 橋接路由與轉送日誌
       http: "logs/http.log" # HTTP 請求日誌
       nats: "logs/nats.log" # NATS 用戶端事件日誌
-      httpstat: "logs/httpstat.log" # HTTP 伺服器執行統計日誌
+      status: "logs/status.log" # HTTP+NATS 狀態統計日誌
       module: "logs/module.log" # 通用模組日誌
 
   # 時區，影響所有日誌時間戳記，支援 IANA 時區名稱（如 Asia/Shanghai）或小時偏移（如 8、-5）
@@ -572,9 +571,10 @@ routes:
 | 設定項      | 型別   | 說明                                                                  |
 | ----------- | ------ | --------------------------------------------------------------------- |
 | `stdout`    | bool   | 是否同時輸出到主控台，`false` 則僅寫檔案                              |
-| `debug`     | bool   | 是否啟用偵錯等級日誌，`false` 僅 Info+                                |
+| `debug`     | []string | 除錯模式旗標陣列；空 `[]` = 僅 Info+。可選：`"HTTP"`（完整HTTP流量）、`"NATS"`（完整NATS流量）、`"LIMIT"`（被拒絕請求的違規詳情） |
 | `overwrite` | bool   | 是否覆蓋模式，`true` 則啟動時清空現有日誌檔案，`false` 或不提供僅附加 |
 | `color`     | bool   | 是否彩色主控台輸出，`true` 或不提供則彩色，`false` 則純文字           |
+| `status_interval_seconds` | int | STATUS 日誌輸出間隔秒數；預設 60 秒                                      |
 | `files`     | object | 各模組獨立日誌檔案路徑（詳見下方）                                    |
 
 ##### `bridge.log.files` — 模組日誌檔案路徑
@@ -585,7 +585,7 @@ routes:
 | `bridge`   | string | 橋接路由與轉送日誌檔案路徑      |
 | `http`     | string | HTTP 請求日誌檔案路徑           |
 | `nats`     | string | NATS 用戶端事件日誌檔案路徑     |
-| `httpstat` | string | HTTP 伺服器執行統計日誌檔案路徑 |
+| `status`   | string | HTTP+NATS 狀態統計日誌檔案路徑  |
 | `module`   | string | 通用模組日誌檔案路徑            |
 
 > 日誌檔案路徑為相對或絕對路徑均可。目錄不存在時會自動建立。

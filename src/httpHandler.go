@@ -536,29 +536,39 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 	// 記錄請求基本資訊，作為橋接層操作追蹤入口。
 	LogBridge(LLog.LogHttpRequest(), req.Method, req.Path, req.RemoteAddr)
 
-	// 根據 Verbose 模式決定輸出完整參數或僅輸出項目數。
+	// 根據 HTTP 除錯模式決定輸出完整參數或僅輸出項目數。
 	if len(req.Params) > 0 {
-		if Verbose {
-			LogBridge(LLog.LogHttpParamsVerbose(), req.Params)
+		if HasDebugHttp() {
+			LogHTTPInfo(LLog.LogHttpParamsVerbose(), req.Params)
 		} else {
 			LogBridge(LLog.LogHttpParams(), len(req.Params))
 		}
 	}
 
-	// 根據 Verbose 模式決定輸出完整 Cookie 或僅輸出項目數。
+	// 根據 HTTP 除錯模式決定輸出完整 Cookie 或僅輸出項目數。
 	if len(req.Cookies) > 0 {
-		if Verbose {
-			LogBridge(LLog.LogHttpCookiesVerbose(), req.Cookies)
+		if HasDebugHttp() {
+			LogHTTPInfo(LLog.LogHttpCookiesVerbose(), req.Cookies)
 		} else {
 			LogBridge(LLog.LogHttpCookies(), len(req.Cookies))
 		}
+	}
+
+	// HTTP 除錯模式：輸出完整請求標頭與本文。
+	if HasDebugHttp() {
+		LogHTTPInfo("HTTP request headers: %v", req.Headers)
+		var bodyStr string
+		if len(req.Body) > 0 {
+			bodyStr = string(req.Body)
+		}
+		LogHTTPBody(LLog.LogHttpBodyRecv(), req.Method, req.Path, bodyStr)
 	}
 
 	// 解析實際用戶端 IP，後續會用於轉發、錯誤詳細資訊判斷與日誌。
 	clientIP := h.resolveClientIP(req.Headers, req.RemoteAddr)
 	if clientIP == "" {
 		LogBridge("%s", LLog.LogResolveIpFailed())
-		return &nyaapiserver.HTTPResponse{StatusCode: 400, Body: []byte(LHTTP.HttpBadRequestResolveIp())}
+		return h.errResp(400, LHTTP.HttpBadRequestResolveIp(), fmt.Sprintf("remote_addr=%s", req.RemoteAddr), "")
 	}
 
 	// 優先檢查是否命中設定檔中的路由。
@@ -574,7 +584,12 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 		// 若路由設定了允許方法，則檢查目前 HTTP Method 是否被允許。
 		if allowed, hasMethods := h.routeMethods[req.Path]; hasMethods && len(allowed) > 0 {
 			if _, ok := allowed[req.Method]; !ok {
-				return &nyaapiserver.HTTPResponse{StatusCode: 405, Body: []byte(LHTTP.HttpMethodNotAllowed())}
+				allowedList := make([]string, 0, len(allowed))
+				for m := range allowed {
+					allowedList = append(allowedList, m)
+				}
+				return h.errResp(405, LHTTP.HttpMethodNotAllowed(),
+					fmt.Sprintf(LHTTP.HttpDetailMethod(), req.Method, strings.Join(allowedList, ", ")), clientIP)
 			}
 		}
 
@@ -585,9 +600,10 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 				if reqContentType == "" {
 					reqContentType = req.Headers["content-type"]
 				}
-				if !strings.HasPrefix(reqContentType, ct) {
-					return &nyaapiserver.HTTPResponse{StatusCode: 415, Body: []byte(LHTTP.HttpUnsupportedMediaType())}
-				}
+			if !strings.HasPrefix(reqContentType, ct) {
+				return h.errResp(415, LHTTP.HttpUnsupportedMediaType(),
+					fmt.Sprintf(LHTTP.HttpDetailContentType(), reqContentType, ct), clientIP)
+			}
 			}
 		}
 
@@ -638,7 +654,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			// 若此路由有編譯後的 Schema，對表單 map 進行驗證。
 			if schema, hasSchema := h.routeSchemas[req.Path]; hasSchema {
 				if err := schema.Validate(formMap); err != nil {
-					if Verbose {
+					if HasDebugLimit() {
 						LogBridge(LLog.LogSchemaValidationFailedVerbose(), req.Path, err)
 					} else {
 						LogBridge(LLog.LogSchemaValidationFailed(), req.Path)
@@ -650,9 +666,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			// 將表單 map 序列化為 JSON，讓下游微服務接收一致格式。
 			jsonBody, jsonErr := json.Marshal(formMap)
 			if jsonErr != nil {
-				return nyaapiserver.JSONResponse(500, map[string]string{
-					"error": LHTTP.HttpInternalErrorMarshalForm(),
-				})
+				return h.errResp(500, LHTTP.HttpInternalErrorMarshalForm(), jsonErr.Error(), clientIP)
 			}
 			req.Body = jsonBody
 
@@ -667,7 +681,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 				return h.errResp(400, LHTTP.HttpInvalidJsonBody(), err.Error(), clientIP)
 			}
 			if err := schema.Validate(bodyJSON); err != nil {
-				if Verbose {
+				if HasDebugLimit() {
 					LogBridge(LLog.LogSchemaValidationFailedVerbose(), req.Path, err)
 				} else {
 					LogBridge(LLog.LogSchemaValidationFailed(), req.Path)
@@ -924,9 +938,9 @@ func (h *BridgeHandler) isErrorDetailIP(ip string) bool {
 // 回應內容也會包含 detail，方便受信任來源除錯。
 // 非白名單來源只會收到通用錯誤訊息，避免暴露內部細節。
 func (h *BridgeHandler) errResp(statusCode int, msg string, detail string, clientIP string) *nyaapiserver.HTTPResponse {
-	// 若有詳細錯誤，依 Verbose 模式決定是否完整輸出。
+	// 若有詳細錯誤，依除錯模式決定是否完整輸出。
 	if detail != "" {
-		if Verbose {
+		if DebugModeEnabled() {
 			LogBridge("%s: %s", msg, detail)
 		} else {
 			LogBridge("%s", msg)
@@ -1014,7 +1028,7 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 			return h.errResp(502, LHTTP.HttpResponseBodyNotJson(), err.Error(), clientIP)
 		}
 		if err := schema.Validate(bodyJSON); err != nil {
-			if Verbose {
+			if HasDebugLimit() {
 				LogBridge(LLog.LogResponseSchemaValidationFailedVerbose(), path, err)
 			} else {
 				LogBridge(LLog.LogResponseSchemaValidationFailed(), path)
@@ -1163,9 +1177,18 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 	// 發送 NATS Request 並等待微服務回應。
 	LogBridge(LLog.LogForwardNats(), natsSubject, timeout)
+	GetNatsStats().RecordRequest()
+	if HasDebugNats() {
+		LogNatsBody(LLog.LogNatsBodySend(), natsSubject, string(reqJSON))
+	}
 	respStr, err := h.natsClient.Request(natsSubject, string(reqJSON), timeout)
 	if err != nil {
+		GetNatsStats().RecordError()
 		return h.errResp(502, LHTTP.HttpBadGatewayNats(), err.Error(), clientIP)
+	}
+	GetNatsStats().RecordReply()
+	if HasDebugNats() {
+		LogNatsBody(LLog.LogNatsBodyRecv(), natsSubject, respStr)
 	}
 
 	// 偵測微服務回傳格式：檢查 JSON 是否包含自訂的 HTTP 狀態碼鍵與錯誤碼鍵。
@@ -1288,6 +1311,12 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	// 確保 Headers 不為 nil，方便後續流程追加標頭。
 	if resp.Headers == nil {
 		resp.Headers = make(map[string]string)
+	}
+
+	// HTTP 除錯模式：輸出回應標頭與本文。
+	if HasDebugHttp() {
+		LogHTTPInfo("HTTP response: status=%d, headers=%v", resp.StatusCode, resp.Headers)
+		LogHTTPBody(LLog.LogHttpBodySend(), resp.StatusCode, string(resp.Body))
 	}
 
 	// 回傳最終 HTTP 回應。

@@ -50,7 +50,10 @@ Runtime log output uses the following prefixes to distinguish source modules:
 | `[NATS]`        | `src/natsLogger.go` | Green  | NATS client connection and events  |
 | `[BRIDGE]`      | `src/logger.go`     | Yellow | Bridge routing and forwarding logs |
 | `[HTTP]`        | `src/logger.go`     | Blue   | HTTP request log lines             |
-| `[HTTPSTAT]`    | `src/logger.go`     | Purple | HTTP server runtime statistics     |
+| `[HTTPINFO]`    | `src/logger.go`     | Blue   | HTTP headers, cookies detail (debug) |
+| `[HTTPBODY]`    | `src/logger.go`     | Blue   | HTTP request/response body (debug)   |
+| `[NATSBODY]`    | `src/logger.go`     | Green  | NATS request/reply payload (debug)   |
+| `[STATUS]`      | `src/logger.go`     | Purple | Periodic HTTP+NATS runtime statistics|
 | `[MODULE]`      | `src/logger.go`     | Cyan   | Generic module logs                |
 | `[NATS][ERROR]` | `src/logger.go`     | Red    | NATS connection errors             |
 | `[HTTP][ERROR]` | `src/logger.go`     | Red    | HTTP server errors                 |
@@ -266,7 +269,6 @@ chmod +x build.sh
 | Argument    | Description                                                                                                                   |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `-c <path>` | Specifies the YAML configuration file path. If not specified, defaults to a `.yaml` file with the same name as the executable |
-| `-v`        | Verbose mode. Outputs complete request/response data (headers, parameters, cookies, Schema validation errors, etc.)           |
 | `-o <path>` | Outputs all logs to the specified file (in addition to console and per-module log files)                                      |
 
 ### Startup Examples
@@ -277,9 +279,6 @@ chmod +x build.sh
 
 # Specify a config file
 ./ApiNatsBridge -c /etc/apibridge/config.yaml
-
-# Verbose mode
-./ApiNatsBridge -c config.yaml -v
 
 # Output all logs to a unified file
 ./ApiNatsBridge -c config.yaml -o ../logs/all.log
@@ -357,7 +356,7 @@ bridge:
   # Log output configuration
   log:
     stdout: true # Whether to also output to the console; set to false to write to log files only
-    debug: true # Whether to enable debug-level logging; set to false to output Info level and above only
+    debug: ["HTTP", "NATS", "LIMIT"] # Debug modes: empty array [] = no debug; options: HTTP, NATS, LIMIT
     overwrite: false # Whether to use overwrite mode; set to true to clear existing log files on startup; set to false or omit to append only
     color: true # Whether to use colored console output; set to true or omit for color; set to false for plain text
     files:
@@ -367,7 +366,7 @@ bridge:
       bridge: "logs/bridge.log" # Bridge routing and forwarding log
       http: "logs/http.log" # HTTP request log
       nats: "logs/nats.log" # NATS client event log
-      httpstat: "logs/httpstat.log" # HTTP server runtime statistics log
+      status: "logs/status.log" # HTTP+NATS status statistics log
       module: "logs/module.log" # Generic module log
 
   # Timezone, affects all log timestamps; supports IANA timezone names (e.g., Asia/Shanghai) or hour offsets (e.g., 8, -5)
@@ -594,9 +593,10 @@ routes:
 | Item        | Type   | Description                                                                                                  |
 | ----------- | ------ | ------------------------------------------------------------------------------------------------------------ |
 | `stdout`    | bool   | Whether to also output to the console; `false` writes to files only                                          |
-| `debug`     | bool   | Whether to enable debug-level logging; `false` enables Info+ only                                            |
+| `debug`     | []string | Debug mode flags array; empty `[]` = Info+ only. Options: `"HTTP"` (full HTTP traffic), `"NATS"` (full NATS traffic), `"LIMIT"` (violation details for rejected requests) |
 | `overwrite` | bool   | Whether to use overwrite mode; `true` clears existing log files on startup; `false` or omission appends only |
 | `color`     | bool   | Whether to use colored console output; `true` or omission enables color; `false` uses plain text             |
+| `status_interval_seconds` | int | STATUS log output interval in seconds; defaults to 60                                                        |
 | `files`     | object | Independent log file paths for each module (see below)                                                       |
 
 ##### `bridge.log.files` — Module Log File Paths
@@ -607,7 +607,7 @@ routes:
 | `bridge`   | string | Bridge routing and forwarding log file path  |
 | `http`     | string | HTTP request log file path                   |
 | `nats`     | string | NATS client event log file path              |
-| `httpstat` | string | HTTP server runtime statistics log file path |
+| `status`   | string | HTTP+NATS status statistics log file path    |
 | `module`   | string | Generic module log file path                 |
 
 > Log file paths can be relative or absolute. Directories are created automatically if they do not exist.
