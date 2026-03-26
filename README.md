@@ -19,6 +19,7 @@ A lightweight HTTP-to-NATS gateway bridge that converts standard HTTP REST reque
 - **IP Rate Limiting** — Built-in per-IP request rate limiting and banning mechanism
 - **TLS/HTTPS Support** — Enable HTTPS by configuring a certificate
 - **`/ping` Endpoint** — Latency measurement endpoint via NATS microservice
+- **Token Verification** — Optional authentication token validation via NATS microservice (e.g., NyarukoLogin UserValidator), with path whitelist and in-memory caching
 - **IP Whitelist Error Details** — Only allows specified IPs to view detailed error information; production environments return generic errors only
 - **Microservice Error Info Display Control** — Configurable `error_info_show` parameter controls whether microservice error content is logged and returned to whitelist IP users or all users
 - **Multi-Language Support (i18n/l10n)** — Logs, HTTP responses, and CLI help text all support multiple languages, configurable independently in the config file (supports en, zh, zh_Hant, ja)
@@ -525,6 +526,7 @@ routes:
 | `error_info_show`  | int      | Global default error info display mode; overridable per route (0=off, 1=log+output, 2=log+output+whitelist, 3=log+output+all, 4=whitelist only, 5=all users) |
 | `limits`           | object   | Global request field length limits                                     |
 | `response_limits`  | object   | Global response field length limits (same structure as limits)         |
+| `token`            | object   | Token verification configuration (see [Token Verification](#token-verification)) |
 
 ##### `bridge.language` — Multi-Language Configuration
 
@@ -774,6 +776,99 @@ routes:
     content_type: "application/json"
     timeout: 60
 ```
+
+## Token Verification
+
+ApiNatsBridge can optionally validate authentication tokens on incoming HTTP requests. When enabled, it extracts a token from a configurable HTTP header, sends it to a NATS-based token verification service (e.g., [NyarukoLogin UserValidator](https://github.com/kagurazakayashi/NyarukoLogin)), and only allows requests with valid tokens to proceed.
+
+### Architecture Flow
+
+```
+┌──────────┐      HTTP        ┌───────────────────┐      NATS        ┌────────────────┐
+│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID!token      │  UserValidator │
+│  Client  │ ────────────────>│  (Gateway/Bridge) │ ────────────────>│  (NATS Micro)  │
+│          │ <────────────────│                   │ <────────────────│                │
+└──────────┘  HTTP 200/401    └───────────────────┘  UUID|result     └────────────────┘
+```
+
+**Step-by-step:**
+
+1. **Client → ApiNatsBridge (HTTP)**: Client sends an HTTP request with the token in the configured header (e.g., `Authorization: v2.local.FcG...`)
+
+2. **ApiNatsBridge → UserValidator (NATS Request)**: Bridge generates a UUID tag, appends `!` (compact mode), and sends `UUID!token` to the configured NATS subject (`auth.token.verify` by default)
+
+3. **UserValidator → ApiNatsBridge (NATS Reply)**: Validator returns `UUID|result` — where `result` is `0` for valid, or an error code (`2`/`3`/`4`) for invalid
+
+4. **ApiNatsBridge → Client (HTTP Response)**:
+   - Valid token (`UUID|0`): Request proceeds to the backend microservice
+   - Invalid token: Returns HTTP 401 with `{"error":"Unauthorized: invalid token"}`
+   - NATS error: Returns HTTP 502 with `{"error":"Bad Gateway: token verification request failed"}`
+   - Missing token: Returns HTTP 401 with `{"error":"Unauthorized: missing authentication token"}`
+
+### NATS Message Formats
+
+| Direction | Format | Example |
+|-----------|--------|---------|
+| ApiNatsBridge → UserValidator | `UUID!token` | `550e8400-e29b-41d4-a716-446655440000!v2.local.FcG...` |
+| UserValidator → ApiNatsBridge (valid) | `UUID\|0` | `550e8400-e29b-41d4-a716-446655440000\|0` |
+| UserValidator → ApiNatsBridge (expired) | `UUID\|4` | `550e8400-e29b-41d4-a716-446655440000\|4` |
+
+- `!` after the tag indicates **compact mode** (returns integer error codes only)
+- `|` is the tag-result separator (configurable via `tag_separator`)
+- For complete NATS-level protocol details, see [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實)
+
+### Configuration
+
+```yaml
+bridge:
+  token:
+    nats_subject: "auth.token.verify"   # NATS subject for verification
+    path_whitelist:                      # Paths exempt from token check
+      - "/ping"
+      - "/auth/login"
+    header_name: "Authorization"         # HTTP header containing the token
+    min_length: 10                       # Minimum token byte length
+    max_length: 4096                     # Maximum token byte length
+    tag_separator: "|"                   # Separator between tag and result
+    success_value: "0"                   # Expected reply value for valid tokens
+    timeout: 5                           # NATS reply timeout in seconds
+    cache_max_entries: 1000              # Max cached verification results
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `nats_subject` | string | `auth.token.verify` | NATS subject for token verification |
+| `path_whitelist` | []string | `[]` | HTTP paths that skip token verification |
+| `header_name` | string | `Authorization` | HTTP header name containing the token |
+| `min_length` | int | `10` | Minimum allowed token byte length |
+| `max_length` | int | `4096` | Maximum allowed token byte length |
+| `tag_separator` | string | `\|` | Character separating the tag and result in replies |
+| `success_value` | string | `0` | Reply value that indicates a valid token |
+| `timeout` | int | `5` | NATS request timeout in seconds |
+| `cache_max_entries` | int | `1000` | Maximum cached token verification results; cache is cleared when full |
+
+> **Note:** Token verification is **disabled by default**. To enable it, the `token` block must be explicitly present in the configuration.
+>
+> The tag is a **UUID v4** (e.g., `550e8400-e29b-41d4-a716-446655440000`), which naturally contains only hexadecimal characters and hyphens — guaranteeing it does not contain `?` or `!`.
+
+### Token Caching
+
+To reduce NATS traffic, successfully verified tokens and recently failed tokens are cached in memory:
+
+- **Cache key**: The full token string
+- **Cache hit (valid)**: Request passes immediately without a NATS call
+- **Cache hit (invalid)**: Request is rejected immediately (HTTP 401)
+- **Cache miss**: NATS verification is performed and the result is cached
+- **Cache eviction**: When `cache_max_entries` is reached, the entire cache is cleared (cold restart strategy)
+
+### Error Codes
+
+| HTTP Status | Message | Cause |
+|-------------|---------|-------|
+| 400 | `invalid token length` | Token is shorter than `min_length` or longer than `max_length` |
+| 401 | `missing authentication token` | Token header not present or empty |
+| 401 | `invalid token` | NATS reply result is not `0` (token expired, malformed, or revoked) |
+| 502 | `token verification request failed` | NATS request timed out or connection error |
 
 ## Client IP Resolution Priority
 

@@ -19,6 +19,7 @@
 - **IP 速率限制** — 内置 IP 维度的请求频率限制与封禁机制
 - **TLS/HTTPS 支持** — 配置证书即可启用 HTTPS
 - **`/ping` 端点** — 通过 NATS 微服务实现的延迟测量端点
+- **令牌验证** — 可选的验证令牌校验，通过 NATS 微服务（如 NyarukoLogin UserValidator）进行，支持路径白名单与内存缓存
 - **IP 白名单错误详情** — 仅允许指定 IP 查看详细错误信息，生产环境仅返回通用错误
 - **微服务错误信息显示控制** — 通过 `error_info_show` 参数设定是否记录、输出微服务错误内容，以及是否将内容返回给白名单 IP 用户或所有用户
 - **多国语言支持 (i18n/l10n)** — 日志、HTTP 响应、CLI 帮助文本均支持多语言，可在配置文件中分别设置（支持 en、zh、zh_Hant、ja）
@@ -525,6 +526,7 @@ routes:
 | `error_info_show`  | int      | 微服务错误信息显示模式的全局默认值；可按路由覆盖（0=不记录、1=记录+输出、2=记录+输出+白名单可见、3=记录+输出+全员可见、4=不记录+白名单可见、5=不记录+全员可见） |
 | `limits`           | object   | 全局请求字段长度限制                                     |
 | `response_limits`  | object   | 全局回应字段长度限制（结构同 limits）                   |
+| `token`            | object   | 令牌验证配置（详见[令牌验证](#令牌验证)）                |
 
 ##### `bridge.language` — 多国语言配置
 
@@ -752,6 +754,99 @@ routes:
     content_type: "application/json"
     timeout: 60
 ```
+
+## 令牌验证
+
+ApiNatsBridge 可选择性地对传入的 HTTP 请求执行验证令牌校验。启用后，它会从可配置的 HTTP 标头中提取令牌，发送至基于 NATS 的令牌验证服务（如 [NyarukoLogin UserValidator](https://github.com/kagurazakayashi/NyarukoLogin)），仅允许持有有效令牌的请求继续处理。
+
+### 架构流程
+
+```
+┌──────────┐      HTTP        ┌───────────────────┐      NATS        ┌────────────────┐
+│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID!token      │  UserValidator │
+│  客户端  │ ────────────────>│  (Gateway/Bridge) │ ────────────────>│  (NATS 微服务) │
+│          │ <────────────────│                   │ <────────────────│                │
+└──────────┘  HTTP 200/401    └───────────────────┘  UUID|结果       └────────────────┘
+```
+
+**步骤说明：**
+
+1. **客户端 → ApiNatsBridge（HTTP）**：客户端发送 HTTP 请求，并在指定的标头（默认 `Authorization`）中携带令牌，如 `Authorization: v2.local.FcG...`
+
+2. **ApiNatsBridge → UserValidator（NATS Request）**：桥接器生成一个 UUID tag，附加 `!`（精简模式），发送 `UUID!令牌` 到配置的 NATS 主题（默认 `auth.token.verify`）
+
+3. **UserValidator → ApiNatsBridge（NATS Reply）**：验证器返回 `UUID|结果` — 其中 `结果` 为 `0` 表示有效，`2`/`3`/`4` 表示不同错误
+
+4. **ApiNatsBridge → 客户端（HTTP Response）**：
+   - 令牌有效（`UUID|0`）：请求继续转发至后端微服务
+   - 令牌无效：返回 HTTP 401，`{"error":"Unauthorized: invalid token"}`
+   - NATS 错误：返回 HTTP 502，`{"error":"Bad Gateway: token verification request failed"}`
+   - 缺少令牌：返回 HTTP 401，`{"error":"Unauthorized: missing authentication token"}`
+
+### NATS 消息格式
+
+| 方向 | 格式 | 示例 |
+|------|------|------|
+| ApiNatsBridge → UserValidator | `UUID!令牌` | `550e8400-e29b-41d4-a716-446655440000!v2.local.FcG...` |
+| UserValidator → ApiNatsBridge（有效） | `UUID\|0` | `550e8400-e29b-41d4-a716-446655440000\|0` |
+| UserValidator → ApiNatsBridge（过期） | `UUID\|4` | `550e8400-e29b-41d4-a716-446655440000\|4` |
+
+- tag 后的 `!` 表示**精简模式**（仅返回整数错误代码）
+- `|` 是 tag 与结果之间的分隔符（可通过 `tag_separator` 配置）
+- 完整的 NATS 层级通信协议详情，请参见 [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實)
+
+### 配置
+
+```yaml
+bridge:
+  token:
+    nats_subject: "auth.token.verify"   # 验证令牌用的 NATS 主题
+    path_whitelist:                      # 不需要检查令牌的路径白名单
+      - "/ping"
+      - "/auth/login"
+    header_name: "Authorization"         # 令牌所在的 HTTP 标头名称
+    min_length: 10                       # 令牌最小字节长度
+    max_length: 4096                     # 令牌最大字节长度
+    tag_separator: "|"                   # tag 与结果之间的分隔符
+    success_value: "0"                   # 令牌有效时的预期返回值
+    timeout: 5                           # 等待 NATS 回复的超时秒数
+    cache_max_entries: 1000              # 缓存的验证结果最大条数
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `nats_subject` | string | `auth.token.verify` | 令牌验证的 NATS 主题 |
+| `path_whitelist` | []string | `[]` | 跳过令牌检查的 HTTP 路径 |
+| `header_name` | string | `Authorization` | 包含令牌的 HTTP 标头名称 |
+| `min_length` | int | `10` | 令牌允许的最小字节长度 |
+| `max_length` | int | `4096` | 令牌允许的最大字节长度 |
+| `tag_separator` | string | `\|` | 回复中分隔 tag 与结果的字符 |
+| `success_value` | string | `0` | 表示令牌有效的返回值 |
+| `timeout` | int | `5` | NATS 请求超时秒数 |
+| `cache_max_entries` | int | `1000` | 缓存的验证结果最大条数，达上限时清空缓存 |
+
+> **注意：** 令牌验证**默认为停用**。若要启用，必须在配置文件中明确加入 `token` 区块。
+>
+> tag 使用 **UUID v4**（如 `550e8400-e29b-41d4-a716-446655440000`），仅包含十六进制字符与连字号，保证不含 `?` 和 `!` 字符。
+
+### 令牌缓存
+
+为减少 NATS 流量，已验证的令牌和最近失败的令牌结果会缓存在内存中：
+
+- **缓存键**：完整的令牌字符串
+- **缓存命中（有效）**：请求直接放行，无需 NATS 调用
+- **缓存命中（无效）**：请求直接拒绝（HTTP 401）
+- **缓存未命中**：执行 NATS 验证并将结果写入缓存
+- **缓存淘汰**：当达到 `cache_max_entries` 上限时，清空整个缓存（冷重启策略）
+
+### 错误代码
+
+| HTTP 状态码 | 消息 | 原因 |
+|-------------|------|------|
+| 400 | `invalid token length` | 令牌长度小于 `min_length` 或大于 `max_length` |
+| 401 | `missing authentication token` | 令牌标头不存在或为空 |
+| 401 | `invalid token` | NATS 返回结果不是 `0`（令牌过期、格式错误或已撤销） |
+| 502 | `token verification request failed` | NATS 请求超时或连接错误 |
 
 ## 客户端 IP 解析优先级
 

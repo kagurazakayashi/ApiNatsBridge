@@ -68,6 +68,16 @@
   "http_detail_value_length": "キー=%s 値長 %d が制限 %d を超過",
   "http_detail_content_type": "受信 Content-Type %q、期待 %q",
   "http_detail_method": "受信メソッド %s、許可: %s",
+  "log_token_config": "トークン検証を有効化: nats_subject=%s, header=%s, min_len=%d, max_len=%d, separator=%q, success_value=%q, timeout=%ds, whitelist=%d パス",
+  "log_token_bypass": "パス %s はトークンチェックホワイトリストに含まれています、トークン検証をスキップ",
+  "log_token_check": "トークン検証リクエストを送信: subject=%s, tag=%s",
+  "log_token_valid": "トークン検証成功: tag=%s",
+  "log_token_invalid": "トークン検証失敗: tag=%s, 応答=%s, 期待値=%s",
+  "http_token_missing": "Unauthorized: 認証トークンがありません",
+  "http_token_invalid_length": "Bad Request: トークン長が無効です",
+  "http_token_verify_failed": "Bad Gateway: トークン検証リクエストに失敗しました",
+  "http_token_invalid": "Unauthorized: トークンが無効です",
+  "http_detail_token_min_max": "トークン長 %d が許容範囲外です (%d-%d)",
   "cli_flag_config": "yaml 設定ファイルパス",
   "cli_flag_output": "すべてのログを指定ファイルに出力"
 }

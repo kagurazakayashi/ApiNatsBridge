@@ -68,6 +68,16 @@
   "http_detail_value_length": "键=%s 值长度 %d 超过限制 %d",
   "http_detail_content_type": "收到 Content-Type %q，期望 %q",
   "http_detail_method": "收到方法 %s，允许: %s",
+  "log_token_config": "已启用令牌验证: nats_subject=%s, header=%s, min_len=%d, max_len=%d, separator=%q, success_value=%q, timeout=%ds, whitelist=%d 路径",
+  "log_token_bypass": "路径 %s 在令牌检查白名单中，跳过令牌验证",
+  "log_token_check": "发送令牌验证请求: subject=%s, tag=%s",
+  "log_token_valid": "令牌验证成功: tag=%s",
+  "log_token_invalid": "令牌验证失败: tag=%s, 回复=%s, 预期=%s",
+  "http_token_missing": "Unauthorized: 缺少验证令牌",
+  "http_token_invalid_length": "Bad Request: 令牌长度无效",
+  "http_token_verify_failed": "Bad Gateway: 令牌验证请求失败",
+  "http_token_invalid": "Unauthorized: 令牌无效",
+  "http_detail_token_min_max": "令牌长度 %d 不在允许范围 (%d-%d)",
   "cli_flag_config": "yaml 配置文件路径",
   "cli_flag_output": "将所有日志输出到指定文件"
 }

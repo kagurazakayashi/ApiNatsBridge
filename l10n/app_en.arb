@@ -68,6 +68,16 @@
   "http_detail_value_length": "key=%s value length %d exceeds limit %d",
   "http_detail_content_type": "received Content-Type %q, expected %q",
   "http_detail_method": "received method %s, allowed: %s",
+  "log_token_config": "Token verification enabled: nats_subject=%s, header=%s, min_len=%d, max_len=%d, separator=%q, success_value=%q, timeout=%ds, whitelist=%d paths",
+  "log_token_bypass": "Path %s is in token check whitelist, bypassing token verification",
+  "log_token_check": "Sending token verification request: subject=%s, tag=%s",
+  "log_token_valid": "Token verification successful: tag=%s",
+  "log_token_invalid": "Token verification failed: tag=%s, reply=%s, expected=%s",
+  "http_token_missing": "Unauthorized: missing authentication token",
+  "http_token_invalid_length": "Bad Request: invalid token length",
+  "http_token_verify_failed": "Bad Gateway: token verification request failed",
+  "http_token_invalid": "Unauthorized: invalid token",
+  "http_detail_token_min_max": "token length %d is outside allowed range (%d-%d)",
   "cli_flag_config": "yaml/config file",
   "cli_flag_output": "output all logs to specified file"
 }

@@ -22,6 +22,159 @@ import (
 // 避免路由未設定 timeout 時造成無限制等待。
 const defaultTimeoutSeconds = 30
 
+// defaultTokenTimeout 定義令牌驗證 NATS 請求的預設逾時秒數。
+const defaultTokenTimeout = 5
+
+// defaultTokenNatsSubject 定義令牌驗證使用的預設 NATS 主題。
+const defaultTokenNatsSubject = "auth.token.verify"
+
+// defaultTokenHeaderName 定義令牌所在的預設 HTTP 標頭名稱。
+const defaultTokenHeaderName = "Authorization"
+
+// defaultTokenMinLength 定義令牌的最小長度預設值。
+const defaultTokenMinLength = 10
+
+// defaultTokenMaxLength 定義令牌的最大長度預設值。
+const defaultTokenMaxLength = 4096
+
+// defaultTokenTagSeparator 定義 tag 與回應內容之間的分隔符預設值。
+const defaultTokenTagSeparator = "|"
+
+// defaultTokenSuccessValue 定義令牌驗證成功時的回傳值預設值。
+const defaultTokenSuccessValue = "0"
+
+// defaultTokenCacheMaxEntries 定義令牌驗證快取的最大筆數預設值。
+//
+// 當快取筆數達到此上限時，會清空整個快取後再重新填入。
+const defaultTokenCacheMaxEntries = 1000
+
+// TokenConfig 定義令牌驗證相關設定。
+//
+// 當此設定存在時，ApiNatsBridge 會在處理每個 HTTP 請求時，
+// 從指定的 HTTP 標頭中提取令牌，並透過 NATS Request 模式
+// 發送至令牌驗證主題進行驗證。
+// 路徑白名單內的請求將略過令牌檢查。
+type TokenConfig struct {
+	// NatsSubject 定義令牌驗證的 NATS 主題名稱（預設：auth.token.verify）
+	NatsSubject string `json:"nats_subject,omitempty" yaml:"nats_subject,omitempty"`
+
+	// PathWhitelist 定義不需要檢查令牌的路徑白名單
+	PathWhitelist []string `json:"path_whitelist,omitempty" yaml:"path_whitelist,omitempty"`
+
+	// HeaderName 定義令牌所在的 HTTP 標頭名稱（預設：Authorization）
+	HeaderName string `json:"header_name,omitempty" yaml:"header_name,omitempty"`
+
+	// MinLength 定義令牌的最小長度（預設：10）
+	MinLength int `json:"min_length,omitempty" yaml:"min_length,omitempty"`
+
+	// MaxLength 定義令牌的最大長度（預設：4096）
+	MaxLength int `json:"max_length,omitempty" yaml:"max_length,omitempty"`
+
+	// TagSeparator 定義 tag 部分的分隔符（預設：|）
+	//
+	// 此字元用於分隔請求 tag 與回傳內容。
+	// 發送到 NATS 的格式為 "tag!令牌"，
+	// 回覆格式為 "tag|0" 或 "tag|{JSON}"。
+	TagSeparator string `json:"tag_separator,omitempty" yaml:"tag_separator,omitempty"`
+
+	// SuccessValue 定義令牌驗證成功時的回傳值（預設：0）
+	//
+	// 與 tag 結合後，預期的回覆格式為 "tag|0"。
+	// 若回覆值不等於此值，則視為令牌驗證失敗。
+	SuccessValue string `json:"success_value,omitempty" yaml:"success_value,omitempty"`
+
+	// Timeout 定義等待令牌驗證回覆的超時秒數（預設：5）
+	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+
+	// CacheMaxEntries 定義令牌驗證快取的最大筆數（預設：1000）
+	//
+	// 快取用於減少對 NATS 驗證服務的重複請求。
+	// 快取的 key 為令牌完整字串，value 為驗證結果。
+	// 當快取筆數達到此上限時，會清空快取並重新開始填入。
+	// 設為 0 或負數時使用預設值。
+	CacheMaxEntries int `json:"cache_max_entries,omitempty" yaml:"cache_max_entries,omitempty"`
+}
+
+// EffectiveNatsSubject 回傳實際使用的 NATS 主題名稱。
+//
+// 若未設定則使用預設值 defaultTokenNatsSubject。
+func (t *TokenConfig) EffectiveNatsSubject() string {
+	if t.NatsSubject == "" {
+		return defaultTokenNatsSubject
+	}
+	return t.NatsSubject
+}
+
+// EffectiveHeaderName 回傳實際使用的 HTTP 標頭名稱。
+//
+// 若未設定則使用預設值 defaultTokenHeaderName。
+func (t *TokenConfig) EffectiveHeaderName() string {
+	if t.HeaderName == "" {
+		return defaultTokenHeaderName
+	}
+	return t.HeaderName
+}
+
+// EffectiveMinLength 回傳實際使用的令牌最小長度。
+//
+// 若未設定則使用預設值 defaultTokenMinLength。
+func (t *TokenConfig) EffectiveMinLength() int {
+	if t.MinLength <= 0 {
+		return defaultTokenMinLength
+	}
+	return t.MinLength
+}
+
+// EffectiveMaxLength 回傳實際使用的令牌最大長度。
+//
+// 若未設定則使用預設值 defaultTokenMaxLength。
+func (t *TokenConfig) EffectiveMaxLength() int {
+	if t.MaxLength <= 0 {
+		return defaultTokenMaxLength
+	}
+	return t.MaxLength
+}
+
+// EffectiveTagSeparator 回傳實際使用的 tag 分隔符。
+//
+// 若未設定則使用預設值 defaultTokenTagSeparator。
+func (t *TokenConfig) EffectiveTagSeparator() string {
+	if t.TagSeparator == "" {
+		return defaultTokenTagSeparator
+	}
+	return t.TagSeparator
+}
+
+// EffectiveSuccessValue 回傳實際使用的成功回傳值。
+//
+// 若未設定則使用預設值 defaultTokenSuccessValue。
+func (t *TokenConfig) EffectiveSuccessValue() string {
+	if t.SuccessValue == "" {
+		return defaultTokenSuccessValue
+	}
+	return t.SuccessValue
+}
+
+// EffectiveTimeout 回傳實際使用的令牌驗證逾時秒數。
+//
+// 若未設定則使用預設值 defaultTokenTimeout。
+func (t *TokenConfig) EffectiveTimeout() int {
+	if t.Timeout <= 0 {
+		return defaultTokenTimeout
+	}
+	return t.Timeout
+}
+
+// EffectiveCacheMaxEntries 回傳實際使用的令牌驗證快取最大筆數。
+//
+// 若未設定則使用預設值 defaultTokenCacheMaxEntries。
+func (t *TokenConfig) EffectiveCacheMaxEntries() int {
+	if t.CacheMaxEntries <= 0 {
+		return defaultTokenCacheMaxEntries
+	}
+	return t.CacheMaxEntries
+}
+
 // ScalarLimitRule 定義純量欄位的長度限制，例如 path 或 body。
 //
 // 純量欄位通常代表單一字串或單一資料區塊，
@@ -187,6 +340,9 @@ type BridgeConfig struct {
 	//   4 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給白名單 IP 使用者。
 	//   5 = 不記錄日誌檔案和輸出（僅保留基本的 [HTTP] 日誌），將內容回傳給所有使用者。
 	ErrorInfoShow *int `json:"error_info_show,omitempty" yaml:"error_info_show,omitempty"`
+
+	// Token 定義令牌驗證相關設定；nil 表示不啟用令牌驗證。
+	Token *TokenConfig `json:"token,omitempty" yaml:"token,omitempty"`
 }
 
 // RouteConfig 定義單一路由的 HTTP 到 NATS 轉發規則。

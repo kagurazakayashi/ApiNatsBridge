@@ -19,6 +19,7 @@
 - **IP レート制限** — IP 単位のリクエスト頻度制限とブロック機構を内蔵
 - **TLS/HTTPS サポート** — 証明書を設定することで HTTPS を有効化可能
 - **`/ping` エンドポイント** — NATS マイクロサービス経由の遅延測定エンドポイント
+- **トークン検証** — オプションの認証トークン検証、NATS マイクロサービス（例：NyarukoLogin UserValidator）経由で実行、パスホワイトリストとメモリキャッシュをサポート
 - **IP ホワイトリストエラー詳細** — 指定された IP のみが詳細なエラー情報を閲覧可能、本番環境では一般的なエラーのみを返す
 - **マイクロサービスエラー情報表示制御** — `error_info_show` パラメータで、マイクロサービスのエラー内容を記録・出力するか、およびその内容をホワイトリストの IP ユーザーまたは全ユーザーに返すかを制御
 - **多言語サポート (i18n/l10n)** — ログ、HTTP レスポンス、CLI ヘルプテキストを多言語対応、設定ファイルで個別に設定可能（en、zh、zh_Hant、ja 対応）
@@ -523,8 +524,9 @@ routes:
 | `response_schema_body`      | object | 応答ボディ JSON Schema 検証のグローバルデフォルトルール；ルート単位で上書き可能 |
 | `response_error_schema_body`| object | エラー応答ボディ JSON Schema 検証のグローバルデフォルトルール；ルート単位で上書き可能 |
 | `error_info_show`  | int      | マイクロサービスエラー情報表示モードのグローバルデフォルト値；ルート単位で上書き可能（0=記録しない、1=記録+出力、2=記録+出力+ホワイトリストに表示、3=記録+出力+全員に表示、4=記録しない+ホワイトリストに表示、5=記録しない+全員に表示） |
-| `limits`           | object   | グローバルリクエストフィールド長制限                                              |
-| `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ）                    |
+| `limits`           | object   | グローバルリクエストフィールド長制限                         |
+| `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ） |
+| `token`            | object   | トークン検証設定（[トークン検証](#トークン検証)を参照）      |
 
 ##### `bridge.language` — 多言語設定
 
@@ -752,6 +754,99 @@ routes:
     content_type: "application/json"
     timeout: 60
 ```
+
+## トークン検証
+
+ApiNatsBridge はオプションで、受信 HTTP リクエストの認証トークンを検証できます。有効にすると、設定可能な HTTP ヘッダーからトークンを抽出し、NATS ベースのトークン検証サービス（例：[NyarukoLogin UserValidator](https://github.com/kagurazakayashi/NyarukoLogin)）に送信し、有効なトークンを持つリクエストのみを通過させます。
+
+### アーキテクチャフロー
+
+```
+┌──────────┐      HTTP        ┌───────────────────┐      NATS        ┌────────────────┐
+│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID!token      │  UserValidator │
+│  クライ  │ ────────────────>│  (Gateway/Bridge) │ ────────────────>│  (NATS マイク) │
+│  アント  │ <────────────────│                   │ <────────────────│                │
+└──────────┘  HTTP 200/401    └───────────────────┘  UUID|結果       └────────────────┘
+```
+
+**手順説明：**
+
+1. **クライアント → ApiNatsBridge（HTTP）**：クライアントが HTTP リクエストを送信し、指定されたヘッダー（デフォルト `Authorization`）にトークンを含めます（例：`Authorization: v2.local.FcG...`）
+
+2. **ApiNatsBridge → UserValidator（NATS Request）**：ブリッジが UUID タグを生成し、`!`（コンパクトモード）を付加して `UUID!トークン` を設定された NATS サブジェクト（デフォルト `auth.token.verify`）に送信します
+
+3. **UserValidator → ApiNatsBridge（NATS Reply）**：バリデーターが `UUID|結果` を返します — `結果` が `0` なら有効、`2`/`3`/`4` は異なるエラーを示します
+
+4. **ApiNatsBridge → クライアント（HTTP Response）**：
+   - トークン有効（`UUID|0`）：リクエストはバックエンドマイクロサービスへ転送されます
+   - トークン無効：HTTP 401 を返却、`{"error":"Unauthorized: invalid token"}`
+   - NATS エラー：HTTP 502 を返却、`{"error":"Bad Gateway: token verification request failed"}`
+   - トークン不在：HTTP 401 を返却、`{"error":"Unauthorized: missing authentication token"}`
+
+### NATS メッセージ形式
+
+| 方向 | 形式 | 例 |
+|------|------|-----|
+| ApiNatsBridge → UserValidator | `UUID!トークン` | `550e8400-e29b-41d4-a716-446655440000!v2.local.FcG...` |
+| UserValidator → ApiNatsBridge（有効） | `UUID\|0` | `550e8400-e29b-41d4-a716-446655440000\|0` |
+| UserValidator → ApiNatsBridge（期限切れ） | `UUID\|4` | `550e8400-e29b-41d4-a716-446655440000\|4` |
+
+- タグの後の `!` は**コンパクトモード**（整数エラーコードのみを返す）を示します
+- `|` はタグと結果の区切り文字です（`tag_separator` で設定可能）
+- NATS レベルの完全なプロトコル詳細は [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實) を参照してください
+
+### 設定
+
+```yaml
+bridge:
+  token:
+    nats_subject: "auth.token.verify"   # トークン検証用 NATS サブジェクト
+    path_whitelist:                      # トークンチェックをスキップするパス
+      - "/ping"
+      - "/auth/login"
+    header_name: "Authorization"         # トークンを含む HTTP ヘッダー名
+    min_length: 10                       # トークンの最小バイト長
+    max_length: 4096                     # トークンの最大バイト長
+    tag_separator: "|"                   # タグと結果の区切り文字
+    success_value: "0"                   # 有効なトークンの期待返却値
+    timeout: 5                           # NATS 応答待ちタイムアウト秒数
+    cache_max_entries: 1000              # キャッシュする検証結果の最大エントリ数
+```
+
+| フィールド | 型 | デフォルト | 説明 |
+|------------|------|-----------|------|
+| `nats_subject` | string | `auth.token.verify` | トークン検証の NATS サブジェクト |
+| `path_whitelist` | []string | `[]` | トークンチェックをスキップする HTTP パス |
+| `header_name` | string | `Authorization` | トークンを含む HTTP ヘッダー名 |
+| `min_length` | int | `10` | トークンの最小許容バイト長 |
+| `max_length` | int | `4096` | トークンの最大許容バイト長 |
+| `tag_separator` | string | `\|` | 応答でタグと結果を区切る文字 |
+| `success_value` | string | `0` | 有効なトークンを示す返却値 |
+| `timeout` | int | `5` | NATS リクエストタイムアウト秒数 |
+| `cache_max_entries` | int | `1000` | キャッシュする検証結果の最大エントリ数、上限到達時にキャッシュクリア |
+
+> **注意：** トークン検証は**デフォルトで無効**です。有効にするには、設定ファイルに `token` ブロックを明示的に記述する必要があります。
+>
+> タグは **UUID v4**（例：`550e8400-e29b-41d4-a716-446655440000`）を使用し、16進数文字とハイフンのみで構成されるため、`?` および `!` を含まないことが保証されます。
+
+### トークンキャッシュ
+
+NATS トラフィックを削減するため、検証済みトークンと最近失敗したトークンの結果はメモリにキャッシュされます：
+
+- **キャッシュキー**：トークンの完全な文字列
+- **キャッシュヒット（有効）**：NATS 呼び出しなしでリクエストを通過
+- **キャッシュヒット（無効）**：即座にリクエストを拒否（HTTP 401）
+- **キャッシュミス**：NATS 検証を実行し、結果をキャッシュに保存
+- **キャッシュ削除**：`cache_max_entries` の上限に達すると、キャッシュ全体をクリア（コールドリスタート戦略）
+
+### エラーコード
+
+| HTTP ステータス | メッセージ | 原因 |
+|----------------|------------|------|
+| 400 | `invalid token length` | トークン長が `min_length` より短いか `max_length` より長い |
+| 401 | `missing authentication token` | トークンヘッダーが存在しないか空 |
+| 401 | `invalid token` | NATS 応答結果が `0` ではない（期限切れ、形式不正、失効） |
+| 502 | `token verification request failed` | NATS リクエストがタイムアウトまたは接続エラー |
 
 ## クライアント IP 解決の優先順位
 

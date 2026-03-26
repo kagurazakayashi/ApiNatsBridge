@@ -12,8 +12,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyaapiserver"
 	"github.com/kagurazakayashi/libNyaruko_Go/nyanats"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -318,6 +320,48 @@ type BridgeHandler struct {
 
 	// routeTimeFormats 是各路徑的日誌時間日期格式。
 	routeTimeFormats map[string]*string
+
+	// --- 令牌驗證相關欄位 ---
+
+	// tokenCfg 保存令牌驗證設定；nil 表示不啟用令牌驗證。
+	tokenCfg *TokenConfig
+
+	// tokenPathSet 是令牌檢查路徑白名單集合。
+	//
+	// 位於此集合的路徑將略過令牌驗證檢查。
+	tokenPathSet map[string]struct{}
+
+	// tokenCache 是令牌驗證結果快取。
+	//
+	// key 為令牌完整字串，value 為驗證結果（true=有效, false=無效）。
+	tokenCache map[string]bool
+
+	// tokenCacheMu 保護 tokenCache 的並行存取安全。
+	tokenCacheMu sync.Mutex
+
+	// tokenCacheMax 是快取的最大容許筆數。
+	tokenCacheMax int
+
+	// tokenSubject 是緩存的 token 驗證 NATS 主題名稱。
+	tokenSubject string
+
+	// tokenHeaderName 是緩存的 token HTTP 標頭名稱。
+	tokenHeaderName string
+
+	// tokenMinLen 是緩存的 token 最小長度。
+	tokenMinLen int
+
+	// tokenMaxLen 是緩存的 token 最大長度。
+	tokenMaxLen int
+
+	// tokenSeparator 是緩存的 tag 分隔符。
+	tokenSeparator string
+
+	// tokenSuccessValue 是緩存的驗證成功回傳值。
+	tokenSuccessValue string
+
+	// tokenTimeout 是緩存的令牌驗證 NATS 請求逾時時間。
+	tokenTimeout time.Duration
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -325,7 +369,7 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string, tokenCfg *TokenConfig) *BridgeHandler {
 
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
@@ -486,6 +530,28 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	// 輸出初始化摘要，方便啟動時確認設定載入狀態。
 	LogBridge(LLog.LogLoadedSummary(), len(routeMap), len(cdnHeaders))
 
+	// 初始化令牌驗證設定。
+	tokenPathSet := make(map[string]struct{})
+	var tokenCache map[string]bool
+	var tokenSubject, tokenHeaderName, tokenSeparator, tokenSuccessValue string
+	var tokenMinLen, tokenMaxLen, tokenCacheMax int
+	var tokenTimeout time.Duration
+	if tokenCfg != nil {
+		for _, p := range tokenCfg.PathWhitelist {
+			tokenPathSet[p] = struct{}{}
+		}
+		tokenCache = make(map[string]bool)
+		tokenSubject = tokenCfg.EffectiveNatsSubject()
+		tokenHeaderName = tokenCfg.EffectiveHeaderName()
+		tokenMinLen = tokenCfg.EffectiveMinLength()
+		tokenMaxLen = tokenCfg.EffectiveMaxLength()
+		tokenSeparator = tokenCfg.EffectiveTagSeparator()
+		tokenSuccessValue = tokenCfg.EffectiveSuccessValue()
+		tokenTimeout = time.Duration(tokenCfg.EffectiveTimeout()) * time.Second
+		tokenCacheMax = tokenCfg.EffectiveCacheMaxEntries()
+		LogBridge(LLog.LogTokenConfig(), tokenSubject, tokenHeaderName, tokenMinLen, tokenMaxLen, tokenSeparator, tokenSuccessValue, tokenCfg.EffectiveTimeout(), len(tokenCfg.PathWhitelist))
+	}
+
 	// 回傳已完成初始化的 BridgeHandler。
 	return &BridgeHandler{
 		natsClient:                   natsClient,
@@ -516,6 +582,17 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		routeErrorInfoShow:           routeErrorInfoShowMap,
 		bridgeTimeFormat:             bridgeTimeFormat,
 		routeTimeFormats:             routeTimeFormatsMap,
+		tokenCfg:                     tokenCfg,
+		tokenPathSet:                 tokenPathSet,
+		tokenCache:                   tokenCache,
+		tokenCacheMax:                tokenCacheMax,
+		tokenSubject:                 tokenSubject,
+		tokenHeaderName:              tokenHeaderName,
+		tokenMinLen:                  tokenMinLen,
+		tokenMaxLen:                  tokenMaxLen,
+		tokenSeparator:               tokenSeparator,
+		tokenSuccessValue:            tokenSuccessValue,
+		tokenTimeout:                 tokenTimeout,
 	}
 }
 
@@ -569,6 +646,17 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 	if clientIP == "" {
 		LogBridge("%s", LLog.LogResolveIpFailed())
 		return h.errResp(400, LHTTP.HttpBadRequestResolveIp(), fmt.Sprintf("remote_addr=%s", req.RemoteAddr), "")
+	}
+
+	// 若啟用了令牌驗證且此路徑不在白名單中，先執行令牌檢查。
+	if h.tokenCfg != nil {
+		if _, isBypass := h.tokenPathSet[req.Path]; !isBypass {
+			if resp := h.verifyToken(req, clientIP); resp != nil {
+				return resp
+			}
+		} else {
+			LogBridge(LLog.LogTokenBypass(), req.Path)
+		}
 	}
 
 	// 優先檢查是否命中設定檔中的路由。
@@ -914,6 +1002,109 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 
 	// 所有來源皆無效時回傳空字串。
 	return ""
+}
+
+// generateTokenTag 產生一個唯一的 UUID tag 字串，用於令牌驗證請求匹配。
+//
+// tag 使用 UUID v4 格式（xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx），
+// 僅包含十六進位字元與連字號，不包含 ? 和 ! 字元。
+func (h *BridgeHandler) generateTokenTag() string {
+	return uuid.New().String()
+}
+
+// verifyToken 從 HTTP 標頭中提取令牌，並透過 NATS 驗證其有效性。
+//
+// 驗證流程：
+//   - 從指定的 HTTP 標頭中提取令牌
+//   - 檢查令牌長度是否符合最小與最大限制
+//   - 查詢快取，若命中則直接回傳快取結果
+//   - 若快取未命中，產生唯一 UUID tag，發送 NATS Request（格式：tag!令牌）
+//   - 等待回覆，判斷回覆是否為 tag|SuccessValue（即 tag|0）
+//   - 將驗證結果寫入快取
+//
+// 若令牌有效，回傳 nil；否則回傳對應的 HTTP 錯誤回應。
+func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP string) *nyaapiserver.HTTPResponse {
+	// 從 HTTP 標頭提取令牌。
+	token := req.Headers[h.tokenHeaderName]
+	if token == "" {
+		token = req.Headers[strings.ToLower(h.tokenHeaderName)]
+	}
+	if token == "" {
+		LogBridge("缺少驗證令牌: path=%s, header=%s", req.Path, h.tokenHeaderName)
+		return h.errResp(401, LHTTP.HttpTokenMissing(),
+			fmt.Sprintf("header %s not found or empty", h.tokenHeaderName), clientIP)
+	}
+
+	// 檢查令牌長度。
+	tokenLen := len(token)
+	if tokenLen < h.tokenMinLen || tokenLen > h.tokenMaxLen {
+		LogBridge("令牌長度無效: path=%s, len=%d, min=%d, max=%d", req.Path, tokenLen, h.tokenMinLen, h.tokenMaxLen)
+		return h.errResp(400, LHTTP.HttpTokenInvalidLength(),
+			fmt.Sprintf(LHTTP.HttpDetailTokenMinMax(), tokenLen, h.tokenMinLen, h.tokenMaxLen), clientIP)
+	}
+
+	// 查詢令牌驗證快取。
+	h.tokenCacheMu.Lock()
+	cachedResult, inCache := h.tokenCache[token]
+	h.tokenCacheMu.Unlock()
+	if inCache {
+		if cachedResult {
+			LogBridge("令牌驗證成功（快取命中）: path=%s", req.Path)
+			return nil
+		}
+		LogBridge("令牌驗證失敗（快取命中）: path=%s", req.Path)
+		return h.errResp(401, LHTTP.HttpTokenInvalid(),
+			fmt.Sprintf("token verification failed (cached), token length=%d", tokenLen), clientIP)
+	}
+
+	// 產生唯一 tag 並發送令牌驗證請求到 NATS。
+	tag := h.generateTokenTag()
+	natsPayload := tag + "!" + token
+	LogBridge(LLog.LogTokenCheck(), h.tokenSubject, tag)
+	GetNatsStats().RecordRequest()
+	if HasDebugNats() {
+		LogNatsBody(LLog.LogNatsBodySend(), h.tokenSubject, natsPayload)
+	}
+	respStr, err := h.natsClient.Request(h.tokenSubject, natsPayload, h.tokenTimeout)
+	if err != nil {
+		GetNatsStats().RecordError()
+		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(), err.Error(), clientIP)
+	}
+	GetNatsStats().RecordReply()
+	if HasDebugNats() {
+		LogNatsBody(LLog.LogNatsBodyRecv(), h.tokenSubject, respStr)
+	}
+
+	// 分析回覆：格式為 tag|結果。
+	expectedPrefix := tag + h.tokenSeparator
+	expectedFull := expectedPrefix + h.tokenSuccessValue
+	respTrimmed := strings.TrimSpace(respStr)
+	tokenValid := respTrimmed == expectedFull
+
+	// 將驗證結果寫入快取。
+	h.tokenCacheMu.Lock()
+	if len(h.tokenCache) >= h.tokenCacheMax {
+		// 快取已滿，清空後再重新填入。
+		h.tokenCache = make(map[string]bool, h.tokenCacheMax)
+	}
+	h.tokenCache[token] = tokenValid
+	h.tokenCacheMu.Unlock()
+
+	if !tokenValid {
+		// 回覆格式不符預期或令牌無效。
+		if !strings.HasPrefix(respTrimmed, expectedPrefix) {
+			LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, expectedFull)
+			return h.errResp(401, LHTTP.HttpTokenInvalid(),
+				fmt.Sprintf("unexpected reply format, got=%q, expected prefix=%q", respTrimmed, expectedPrefix), clientIP)
+		}
+		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, expectedFull)
+		return h.errResp(401, LHTTP.HttpTokenInvalid(),
+			fmt.Sprintf("token verification failed, reply=%q, expected=%q", respTrimmed, expectedFull), clientIP)
+	}
+
+	// 令牌驗證成功。
+	LogBridge(LLog.LogTokenValid(), tag)
+	return nil
 }
 
 // isErrorDetailIP 會檢查指定 IP 是否位於錯誤詳細資訊白名單中。
