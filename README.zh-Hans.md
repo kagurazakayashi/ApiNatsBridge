@@ -527,6 +527,8 @@ routes:
 | `limits`           | object   | 全局请求字段长度限制                                     |
 | `response_limits`  | object   | 全局回应字段长度限制（结构同 limits）                   |
 | `token`            | object   | 令牌验证配置（详见[令牌验证](#令牌验证)）                |
+| `max_concurrent` | int | `0`（不限制） | 全局最大并发 NATS 转发请求数，超限时返回 503 |
+| `http_max_concurrent` | int | `0`（不限制） | HTTP 层最大并发请求处理数，超限时返回 503 |
 
 ##### `bridge.language` — 多国语言配置
 
@@ -612,6 +614,7 @@ routes:
 | `error_code_key`   | string   | ""（不启用）    | 微服务返回 JSON 中表示错误码的键名（int32）；检测到此键时触发 response_error_schema_body 验证 |
 | `error_info_show`  | int      | 0               | 微服务错误信息显示模式（覆盖 bridge 级别）；0=不记录、1=记录、2=记录+白名单可见、3=记录+全员可见、4=不记录+白名单可见、5=不记录+全员可见 |
 | `time_format`      | string   | -               | 路由级别日志时间日期显示格式（覆盖 bridge 级别）；语义同 bridge 层的 `time_format` |
+| `max_concurrent` | int | `0`（沿用全局） | 路由级别最大并发 NATS 转发请求数；0 表示沿用全局限制；超限时返回 503 |
 
 #### `return_fields` 可选值
 
@@ -811,6 +814,7 @@ bridge:
     success_value: "0"                   # 令牌有效时的预期返回值
     timeout: 5                           # 等待 NATS 回复的超时秒数
     cache_max_entries: 1000              # 缓存的验证结果最大条数
+    max_concurrent: 256                  # 最大并发验证数
 ```
 
 | 字段 | 类型 | 默认值 | 说明 |
@@ -824,6 +828,7 @@ bridge:
 | `success_value` | string | `0` | 表示令牌有效的返回值 |
 | `timeout` | int | `5` | NATS 请求超时秒数 |
 | `cache_max_entries` | int | `1000` | 缓存的验证结果最大条数，达上限时清空缓存 |
+| `max_concurrent` | int | `256` | 最大并发令牌验证 NATS 请求数，超限时返回 HTTP 503 |
 
 > **注意：** 令牌验证**默认为停用**。若要启用，必须在配置文件中明确加入 `token` 区块。
 >
@@ -847,6 +852,7 @@ bridge:
 | 401 | `missing authentication token` | 令牌标头不存在或为空 |
 | 401 | `invalid token` | NATS 返回结果不是 `0`（令牌过期、格式错误或已撤销） |
 | 502 | `token verification request failed` | NATS 请求超时或连接错误 |
+| 503 | `too many token verification requests` | 并发验证数达到上限（max_concurrent） |
 
 ## 客户端 IP 解析优先级
 

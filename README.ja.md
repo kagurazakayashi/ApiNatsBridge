@@ -527,6 +527,8 @@ routes:
 | `limits`           | object   | グローバルリクエストフィールド長制限                         |
 | `response_limits`  | object   | グローバルレスポンスフィールド長制限（構造は limits と同じ） |
 | `token`            | object   | トークン検証設定（[トークン検証](#トークン検証)を参照）      |
+| `max_concurrent` | int | `0`（無制限） | グローバル最大並行 NATS 転送リクエスト数、超過時に 503 |
+| `http_max_concurrent` | int | `0`（無制限） | HTTP 層の最大並行リクエスト処理数、超過時に 503 |
 
 ##### `bridge.language` — 多言語設定
 
@@ -612,6 +614,7 @@ routes:
 | `error_code_key`   | string   | ""（無効）       | マイクロサービス応答 JSON 内のエラーコードを示すキー名（int32）；検出時に response_error_schema_body 検証をトリガー |
 | `error_info_show`  | int      | 0                | マイクロサービスエラー情報表示モード（bridge レベルを上書き）；0=記録しない、1=記録、2=記録+ホワイトリストに表示、3=記録+全員に表示、4=記録しない+ホワイトリストに表示、5=記録しない+全員に表示 |
 | `time_format`      | string   | -               | ルートレベルログタイムスタンプ表示形式（bridge レベルを上書き）；意味は bridge レベルの `time_format` と同じ |
+| `max_concurrent` | int | `0`（グローバルに従う） | ルートレベルの最大並行 NATS 転送リクエスト数；0 はグローバル制限に従う；超過時に 503 |
 
 #### `return_fields` 選択可能な値
 
@@ -811,6 +814,7 @@ bridge:
     success_value: "0"                   # 有効なトークンの期待返却値
     timeout: 5                           # NATS 応答待ちタイムアウト秒数
     cache_max_entries: 1000              # キャッシュする検証結果の最大エントリ数
+    max_concurrent: 256                  # 最大並行検証数
 ```
 
 | フィールド | 型 | デフォルト | 説明 |
@@ -824,6 +828,7 @@ bridge:
 | `success_value` | string | `0` | 有効なトークンを示す返却値 |
 | `timeout` | int | `5` | NATS リクエストタイムアウト秒数 |
 | `cache_max_entries` | int | `1000` | キャッシュする検証結果の最大エントリ数、上限到達時にキャッシュクリア |
+| `max_concurrent` | int | `256` | 同時トークン検証 NATS リクエストの最大数、超過時に HTTP 503 を返却 |
 
 > **注意：** トークン検証は**デフォルトで無効**です。有効にするには、設定ファイルに `token` ブロックを明示的に記述する必要があります。
 >
@@ -847,6 +852,7 @@ NATS トラフィックを削減するため、検証済みトークンと最近
 | 401 | `missing authentication token` | トークンヘッダーが存在しないか空 |
 | 401 | `invalid token` | NATS 応答結果が `0` ではない（期限切れ、形式不正、失効） |
 | 502 | `token verification request failed` | NATS リクエストがタイムアウトまたは接続エラー |
+| 503 | `too many token verification requests` | 同時検証数が上限（max_concurrent）に到達 |
 
 ## クライアント IP 解決の優先順位
 

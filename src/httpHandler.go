@@ -362,6 +362,41 @@ type BridgeHandler struct {
 
 	// tokenTimeout 是緩存的令牌驗證 NATS 請求逾時時間。
 	tokenTimeout time.Duration
+
+	// tokenSem 是令牌驗證的並行控制信號量。
+	//
+	// 使用帶緩衝的 channel 實現，容量由 MaxConcurrent 設定決定。
+	// 發送前先佔用一個槽位，完成後釋放。
+	tokenSem chan struct{}
+
+	// tokenMaxConcurrent 是信號量的最大容量。
+	tokenMaxConcurrent int
+
+	// --- HTTP 層與轉發層並行控制 ---
+
+	// httpSem 是 HTTP 請求處理的並行控制信號量。
+	//
+	// 限制同時處理的 HTTP 請求總數，保護系統不被瞬間流量壓垮。
+	httpSem chan struct{}
+
+	// httpMaxConcurrent 是 HTTP 層信號量的最大容量。
+	httpMaxConcurrent int
+
+	// forwardSem 是全域 NATS 轉發的並行控制信號量。
+	//
+	// 限制同時等待 NATS 回應的請求總數。
+	forwardSem chan struct{}
+
+	// forwardMaxConcurrent 是全域轉發信號量的最大容量。
+	forwardMaxConcurrent int
+
+	// routeForwardSem 是各路徑的 NATS 轉發並行控制信號量。
+	//
+	// 用於保護特定後端微服務，可被 RouteConfig.MaxConcurrent 覆蓋。
+	routeForwardSem map[string]chan struct{}
+
+	// routeForwardMaxConcurrent 是各路徑的最大轉發並行數。
+	routeForwardMaxConcurrent map[string]int
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -369,7 +404,7 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string, tokenCfg *TokenConfig) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string, tokenCfg *TokenConfig, bridgeMaxConcurrent int, bridgeHTTPMaxConcurrent int) *BridgeHandler {
 
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
@@ -534,8 +569,9 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	tokenPathSet := make(map[string]struct{})
 	var tokenCache map[string]bool
 	var tokenSubject, tokenHeaderName, tokenSeparator, tokenSuccessValue string
-	var tokenMinLen, tokenMaxLen, tokenCacheMax int
+	var tokenMinLen, tokenMaxLen, tokenCacheMax, tokenMaxConcurrent int
 	var tokenTimeout time.Duration
+	var tokenSem chan struct{}
 	if tokenCfg != nil {
 		for _, p := range tokenCfg.PathWhitelist {
 			tokenPathSet[p] = struct{}{}
@@ -549,7 +585,30 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		tokenSuccessValue = tokenCfg.EffectiveSuccessValue()
 		tokenTimeout = time.Duration(tokenCfg.EffectiveTimeout()) * time.Second
 		tokenCacheMax = tokenCfg.EffectiveCacheMaxEntries()
+		tokenMaxConcurrent = tokenCfg.EffectiveMaxConcurrent()
+		tokenSem = make(chan struct{}, tokenMaxConcurrent)
 		LogBridge(LLog.LogTokenConfig(), tokenSubject, tokenHeaderName, tokenMinLen, tokenMaxLen, tokenSeparator, tokenSuccessValue, tokenCfg.EffectiveTimeout(), len(tokenCfg.PathWhitelist))
+	}
+
+	// 初始化轉發層與 HTTP 層並行控制信號量。
+	var httpSem chan struct{}
+	if bridgeHTTPMaxConcurrent > 0 {
+		httpSem = make(chan struct{}, bridgeHTTPMaxConcurrent)
+		LogBridge("HTTP 層並行控制已啟用: max_concurrent=%d", bridgeHTTPMaxConcurrent)
+	}
+	var forwardSem chan struct{}
+	if bridgeMaxConcurrent > 0 {
+		forwardSem = make(chan struct{}, bridgeMaxConcurrent)
+		LogBridge("全域轉發並行控制已啟用: max_concurrent=%d", bridgeMaxConcurrent)
+	}
+	routeForwardSem := make(map[string]chan struct{})
+	routeForwardMaxConcurrent := make(map[string]int)
+	for _, r := range routes {
+		if r.MaxConcurrent > 0 {
+			routeForwardSem[r.Path] = make(chan struct{}, r.MaxConcurrent)
+			routeForwardMaxConcurrent[r.Path] = r.MaxConcurrent
+			LogBridge("路由轉發並行控制已啟用: path=%s, max_concurrent=%d", r.Path, r.MaxConcurrent)
+		}
 	}
 
 	// 回傳已完成初始化的 BridgeHandler。
@@ -593,15 +652,43 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		tokenSeparator:               tokenSeparator,
 		tokenSuccessValue:            tokenSuccessValue,
 		tokenTimeout:                 tokenTimeout,
+		tokenSem:                     tokenSem,
+		tokenMaxConcurrent:           tokenMaxConcurrent,
+		httpSem:                      httpSem,
+		httpMaxConcurrent:            bridgeHTTPMaxConcurrent,
+		forwardSem:                   forwardSem,
+		forwardMaxConcurrent:         bridgeMaxConcurrent,
+		routeForwardSem:              routeForwardSem,
+		routeForwardMaxConcurrent:    routeForwardMaxConcurrent,
 	}
 }
 
 // Handle 是 HTTP 請求的統一入口。
 //
 // 此方法會將請求交由 handleRequest 執行路由、驗證與 NATS 轉發。
-// 此方法適合作為外部 HTTP 伺服器呼叫 BridgeHandler 的主要進入點。
+// 若設定了 HTTP 層並行限制，會先檢查信號量，超限時回傳 503。
 func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTPResponse {
+	// HTTP 層並行控制。
+	if h.httpSem != nil {
+		current := len(h.httpSem)
+		if current >= h.httpMaxConcurrent {
+			LogBridge(LLog.LogBridgeConcurrentFull(), h.httpMaxConcurrent)
+			return nyaapiserver.JSONResponse(503, map[string]string{
+				"error": LHTTP.HttpBridgeConcurrentFull(),
+			})
+		}
+		checkConcurrentWarn(current, h.httpMaxConcurrent, LLog.LogBridgeConcurrentWarn())
+		h.httpSem <- struct{}{}
+		defer func() { <-h.httpSem }()
+	}
 	return h.handleRequest(req)
+}
+
+// checkConcurrentWarn 檢查並行數是否已達 ≥90% 上限，若是則輸出警告日誌。
+func checkConcurrentWarn(current, max int, format string) {
+	if max > 0 && current > 0 && float64(current)/float64(max) >= 0.9 {
+		LogBridge(format, current, max)
+	}
 }
 
 // handleRequest 是 HTTP 請求的實際處理邏輯。
@@ -1057,6 +1144,27 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 			fmt.Sprintf("token verification failed (cached), token length=%d", tokenLen), clientIP)
 	}
 
+	// 令牌驗證並行控制：使用信號量限制同時進行中的驗證請求數量。
+	// 若信號量已滿，表示目前有過多驗證請求等待中，立即拒絕新請求以保護系統穩定性。
+	currentConcurrent := len(h.tokenSem)
+	if currentConcurrent >= h.tokenMaxConcurrent {
+		LogBridge(LLog.LogTokenConcurrentFull(), h.tokenMaxConcurrent)
+		return h.errResp(503, LHTTP.HttpTokenConcurrentFull(),
+			fmt.Sprintf("max concurrent verifications reached (%d)", h.tokenMaxConcurrent), clientIP)
+	}
+
+	// 接近上限時輸出警告（≥90%）。
+	if h.tokenMaxConcurrent > 0 && currentConcurrent > 0 {
+		ratio := float64(currentConcurrent) / float64(h.tokenMaxConcurrent)
+		if ratio >= 0.9 {
+			LogBridge(LLog.LogTokenConcurrentWarn(), currentConcurrent, h.tokenMaxConcurrent)
+		}
+	}
+
+	// 佔用一個並行驗證槽位，完成後釋放。
+	h.tokenSem <- struct{}{}
+	defer func() { <-h.tokenSem }()
+
 	// 產生唯一 tag 並發送令牌驗證請求到 NATS。
 	tag := h.generateTokenTag()
 	natsPayload := tag + "!" + token
@@ -1362,6 +1470,51 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	if err != nil {
 		return h.errResp(500, LHTTP.HttpInternalErrorMarshalRequest(), err.Error(), clientIP)
 	}
+
+	// --- 轉發並行控制 ---
+
+	// 路由層級並行控制：檢查此路徑是否有獨立信號量限制。
+	routeSem := h.routeForwardSem[req.Path]
+	routeSemMax := h.routeForwardMaxConcurrent[req.Path]
+	var routeAcquired bool
+	if routeSem != nil {
+		current := len(routeSem)
+		if current >= routeSemMax {
+			LogBridge(LLog.LogRouteConcurrentFull(), req.Path, routeSemMax)
+			return h.errResp(503, LHTTP.HttpRouteConcurrentFull(),
+				fmt.Sprintf("route %s max concurrent forwarding reached (%d)", req.Path, routeSemMax), clientIP)
+		}
+		checkConcurrentWarn(current, routeSemMax, LLog.LogRouteConcurrentWarn())
+		routeSem <- struct{}{}
+		routeAcquired = true
+	}
+
+	// 全域轉發並行控制。
+	var forwardAcquired bool
+	if h.forwardSem != nil {
+		current := len(h.forwardSem)
+		if current >= h.forwardMaxConcurrent {
+			if routeAcquired {
+				<-routeSem
+			}
+			LogBridge(LLog.LogForwardConcurrentFull(), h.forwardMaxConcurrent)
+			return h.errResp(503, LHTTP.HttpForwardConcurrentFull(),
+				fmt.Sprintf("max concurrent forwarding reached (%d)", h.forwardMaxConcurrent), clientIP)
+		}
+		checkConcurrentWarn(current, h.forwardMaxConcurrent, LLog.LogForwardConcurrentWarn())
+		h.forwardSem <- struct{}{}
+		forwardAcquired = true
+	}
+
+	// 確保信號量在函式結束時釋放。
+	defer func() {
+		if forwardAcquired {
+			<-h.forwardSem
+		}
+		if routeAcquired {
+			<-routeSem
+		}
+	}()
 
 	// 取得此路由的 NATS Request 逾時設定。
 	timeout := h.routeTimeouts[req.Path]

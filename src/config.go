@@ -48,6 +48,11 @@ const defaultTokenSuccessValue = "0"
 // 當快取筆數達到此上限時，會清空整個快取後再重新填入。
 const defaultTokenCacheMaxEntries = 1000
 
+// defaultTokenMaxConcurrent 定義令牌驗證的預設最大並行數。
+//
+// 超過此數量時，新的驗證請求會立即收到 HTTP 503 回應。
+const defaultTokenMaxConcurrent = 256
+
 // TokenConfig 定義令牌驗證相關設定。
 //
 // 當此設定存在時，ApiNatsBridge 會在處理每個 HTTP 請求時，
@@ -93,6 +98,13 @@ type TokenConfig struct {
 	// 當快取筆數達到此上限時，會清空快取並重新開始填入。
 	// 設為 0 或負數時使用預設值。
 	CacheMaxEntries int `json:"cache_max_entries,omitempty" yaml:"cache_max_entries,omitempty"`
+
+	// MaxConcurrent 定義令牌驗證的最大並行請求數（預設：256）
+	//
+	// 當同時進行中的驗證請求達到此數量時，新的驗證請求會立即收到 HTTP 503 回應。
+	// 接近上限（≥90%）時會在日誌中輸出警告。
+	// 設為 0 或負數時使用預設值。
+	MaxConcurrent int `json:"max_concurrent,omitempty" yaml:"max_concurrent,omitempty"`
 }
 
 // EffectiveNatsSubject 回傳實際使用的 NATS 主題名稱。
@@ -173,6 +185,16 @@ func (t *TokenConfig) EffectiveCacheMaxEntries() int {
 		return defaultTokenCacheMaxEntries
 	}
 	return t.CacheMaxEntries
+}
+
+// EffectiveMaxConcurrent 回傳實際使用的令牌驗證最大並行數。
+//
+// 若未設定則使用預設值 defaultTokenMaxConcurrent。
+func (t *TokenConfig) EffectiveMaxConcurrent() int {
+	if t.MaxConcurrent <= 0 {
+		return defaultTokenMaxConcurrent
+	}
+	return t.MaxConcurrent
 }
 
 // ScalarLimitRule 定義純量欄位的長度限制，例如 path 或 body。
@@ -343,6 +365,18 @@ type BridgeConfig struct {
 
 	// Token 定義令牌驗證相關設定；nil 表示不啟用令牌驗證。
 	Token *TokenConfig `json:"token,omitempty" yaml:"token,omitempty"`
+
+	// MaxConcurrent 定義全域轉發 NATS 的最大並行請求數（預設：0 = 不限制）
+	//
+	// 當同時進行中的 NATS 轉發請求達到此數量時，新請求會收到 HTTP 503。
+	// 接近上限（≥90%）時會在日誌中輸出警告。
+	MaxConcurrent int `json:"max_concurrent,omitempty" yaml:"max_concurrent,omitempty"`
+
+	// HTTPMaxConcurrent 定義 HTTP 層的最大並行請求處理數（預設：0 = 不限制）
+	//
+	// 此限制作用於整個 HTTP 請求處理流程，包含令牌驗證與 NATS 轉發。
+	// 接近上限（≥90%）時會在日誌中輸出警告。
+	HTTPMaxConcurrent int `json:"http_max_concurrent,omitempty" yaml:"http_max_concurrent,omitempty"`
 }
 
 // RouteConfig 定義單一路由的 HTTP 到 NATS 轉發規則。
@@ -429,6 +463,13 @@ type RouteConfig struct {
 	// 若 bridge 層亦未設定，則使用程式預設值 "YYYY-MM-DD HH:mm:ss"。
 	// 若設為空字串 ""，控制台輸出將不顯示時間日期，但日誌檔案仍會依照預設格式記錄時間日期。
 	TimeFormat *string `json:"time_format,omitempty" yaml:"time_format,omitempty"`
+
+	// MaxConcurrent 定義此路由的最大並行 NATS 轉發請求數（預設：0 = 不限制）。
+	//
+	// 此限制獨立於 bridge.max_concurrent 全域轉發限制，
+	// 用於保護特定後端微服務不被過量請求淹沒。
+	// 超限時回傳 HTTP 503。
+	MaxConcurrent int `json:"max_concurrent,omitempty" yaml:"max_concurrent,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。

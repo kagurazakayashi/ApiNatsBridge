@@ -54,7 +54,7 @@ func Run() {
 	}
 
 	// 建立橋接處理器，負責將 HTTP 請求依路由設定轉送至對應的 NATS subject。
-	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ResponseLimits, bridgeConfig.ErrorDetailIPs, bridgeConfig.HTTPCodeKey, bridgeConfig.ErrorCodeKey, bridgeConfig.ResponseSchemaBody, bridgeConfig.ResponseErrorSchemaBody, bridgeConfig.ErrorInfoShow, bridgeConfig.TimeFormat, bridgeConfig.Token)
+	handler := NewBridgeHandler(natsClient, routes, bridgeConfig.CdnHeader, bridgeConfig.Limits, bridgeConfig.ResponseLimits, bridgeConfig.ErrorDetailIPs, bridgeConfig.HTTPCodeKey, bridgeConfig.ErrorCodeKey, bridgeConfig.ResponseSchemaBody, bridgeConfig.ResponseErrorSchemaBody, bridgeConfig.ErrorInfoShow, bridgeConfig.TimeFormat, bridgeConfig.Token, bridgeConfig.MaxConcurrent, bridgeConfig.HTTPMaxConcurrent)
 
 	// 建立 HTTP API 伺服器，並掛載橋接處理器作為請求入口。
 	var httpAPIServer *nyaapiserver.Server = nyaapiserver.NewServer(httpAPIServerConfig, handler.Handle, HTTPLogger)

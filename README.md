@@ -527,6 +527,8 @@ routes:
 | `limits`           | object   | Global request field length limits                                     |
 | `response_limits`  | object   | Global response field length limits (same structure as limits)         |
 | `token`            | object   | Token verification configuration (see [Token Verification](#token-verification)) |
+| `max_concurrent` | int | `0` (unlimited) | Global max concurrent NATS forwarding requests; returns 503 when exceeded |
+| `http_max_concurrent` | int | `0` (unlimited) | Global max concurrent HTTP requests processed; returns 503 when exceeded |
 
 ##### `bridge.language` — Multi-Language Configuration
 
@@ -634,6 +636,7 @@ routes:
 | `error_code_key`   | string   | "" (disable)    | Microservice response JSON key for error code (int32); triggers response_error_schema_body when detected |
 | `error_info_show`  | int      | 0               | Microservice error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all |
 | `time_format`      | string   | -               | Route-level log timestamp format (overrides bridge level); same semantics as bridge-level `time_format` |
+| `max_concurrent` | int | `0` (global) | Route-level max concurrent NATS forwarding; 0 uses global limit; returns 503 when exceeded |
 
 #### `return_fields` Options
 
@@ -833,6 +836,7 @@ bridge:
     success_value: "0"                   # Expected reply value for valid tokens
     timeout: 5                           # NATS reply timeout in seconds
     cache_max_entries: 1000              # Max cached verification results
+    max_concurrent: 256                  # Max concurrent verifications
 ```
 
 | Field | Type | Default | Description |
@@ -846,6 +850,7 @@ bridge:
 | `success_value` | string | `0` | Reply value that indicates a valid token |
 | `timeout` | int | `5` | NATS request timeout in seconds |
 | `cache_max_entries` | int | `1000` | Maximum cached token verification results; cache is cleared when full |
+| `max_concurrent` | int | `256` | Maximum concurrent token verification NATS requests; returns HTTP 503 when exceeded |
 
 > **Note:** Token verification is **disabled by default**. To enable it, the `token` block must be explicitly present in the configuration.
 >
@@ -869,6 +874,7 @@ To reduce NATS traffic, successfully verified tokens and recently failed tokens 
 | 401 | `missing authentication token` | Token header not present or empty |
 | 401 | `invalid token` | NATS reply result is not `0` (token expired, malformed, or revoked) |
 | 502 | `token verification request failed` | NATS request timed out or connection error |
+| 503 | `too many token verification requests` | Concurrent verification limit reached (max_concurrent) |
 
 ## Client IP Resolution Priority
 
