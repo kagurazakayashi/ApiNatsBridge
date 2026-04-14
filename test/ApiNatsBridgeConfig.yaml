@@ -236,8 +236,17 @@ bridge:
   #
   # # 全域转发 NATS 的最大并发请求数（0 = 不限制）
   # max_concurrent: 512
-  # # HTTP 层的最大并发请求处理数（0 = 不限制）
+  #   # HTTP 层的最大并发请求处理数（0 = 不限制）
   # http_max_concurrent: 1024
+  #
+  # # 自定义回应标头（全局级别，附加到所有 HTTP 回应）
+  # # 注意：Access-Control-Allow-Methods 与 Access-Control-Allow-Headers
+  # #   当路由 methods 包含 OPTIONS 时会自动从路由设定产生，
+  # #   无需在此手动设定；如需覆盖可在路由级别 response_headers 中指定。
+  # response_headers:
+  #   Access-Control-Allow-Origin: "*"
+  #   X-Frame-Options: "DENY"
+  #   X-Content-Type-Options: "nosniff"
 
 # --- 路由转发规则 ---
 # 每条路由定义一个 HTTP 路径如何被验证并转发到 NATS Subject
@@ -376,3 +385,8 @@ routes:
     # time_format: "2006-01-02 15:04:05"   # 默认值：YYYY-MM-DD HH:mm:ss
     # 此路由的最大并发 NATS 转发请求数（0 = 不限制，保护特定后端微服务）
     # max_concurrent: 64
+    # 此路由专用的自定义回应标头（覆盖自动 CORS 与 bridge 层全局设定）
+    # 例如要限定 Origin 或覆蓋自動產生的 Allow-Methods：
+    # response_headers:
+    #   Access-Control-Allow-Origin: "https://example.com"
+    #   X-Custom-Header: "custom-value"

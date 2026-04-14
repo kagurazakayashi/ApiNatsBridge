@@ -397,6 +397,23 @@ type BridgeHandler struct {
 
 	// routeForwardMaxConcurrent 是各路徑的最大轉發並行數。
 	routeForwardMaxConcurrent map[string]int
+
+	// --- 自訂回應標頭 ---
+
+	// bridgeResponseHeaders 是橋接層全域自訂回應標頭，會附加到所有 HTTP 回應中。
+	bridgeResponseHeaders map[string]string
+
+	// routeResponseHeaders 是各路徑的自訂回應標頭。
+	//
+	// 路由層級標頭會覆蓋 bridgeResponseHeaders 中的同名標頭。
+	routeResponseHeaders map[string]map[string]string
+
+	// routeCorsAutoHeaders 是各路徑自動產生的 CORS 回應標頭。
+	//
+	// 當路由的 methods 包含 OPTIONS 時，會自動從 methods 與 content_type 推導
+	// Access-Control-Allow-Methods 與 Access-Control-Allow-Headers。
+	// 優先序：使用者自訂 response_headers > 自動產生 CORS > bridgeResponseHeaders。
+	routeCorsAutoHeaders map[string]map[string]string
 }
 
 // NewBridgeHandler 會根據路由設定建立並初始化新的 BridgeHandler。
@@ -404,7 +421,7 @@ type BridgeHandler struct {
 // 初始化過程會建立路徑、NATS Subject、逾時、HTTP 方法、Content-Type、
 // 請求與回應 Schema、欄位長度限制、回傳欄位白名單及錯誤詳細資訊白名單等對應表。
 // 若 Schema 編譯失敗，該路由的對應 Schema 驗證會被略過，但路由本身仍可繼續載入。
-func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string, tokenCfg *TokenConfig, bridgeMaxConcurrent int, bridgeHTTPMaxConcurrent int) *BridgeHandler {
+func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHeaders []string, limits *LimitRule, responseLimits *LimitRule, errorDetailIPs []string, bridgeHTTPCodeKey string, bridgeErrorCodeKey string, bridgeResponseSchemaBody map[string]interface{}, bridgeResponseErrorSchemaBody map[string]interface{}, bridgeErrorInfoShow *int, bridgeTimeFormat *string, tokenCfg *TokenConfig, bridgeMaxConcurrent int, bridgeHTTPMaxConcurrent int, bridgeResponseHeaders map[string]string) *BridgeHandler {
 
 	// 初始化路由、逾時、方法、Content-Type 與各種驗證規則的索引表。
 	routeMap := make(map[string]string)
@@ -424,6 +441,8 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeResponseLimitsMap := make(map[string]*LimitRule)
 	routeErrorInfoShowMap := make(map[string]*int)
 	routeTimeFormatsMap := make(map[string]*string)
+	routeResponseHeadersMap := make(map[string]map[string]string)
+	routeCorsAutoHeadersMap := make(map[string]map[string]string)
 
 	// 將錯誤詳細資訊白名單轉為 set，方便請求處理時 O(1) 查詢。
 	errorIPSet := make(map[string]struct{}, len(errorDetailIPs))
@@ -450,6 +469,30 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 			allowed[strings.ToUpper(m)] = struct{}{}
 		}
 		methodMap[r.Path] = allowed
+
+		// 若路由允許 OPTIONS 方法，自動產生 CORS 回應標頭。
+		if _, allowOptions := allowed["OPTIONS"]; allowOptions {
+			corsHeaders := make(map[string]string)
+
+			// Access-Control-Allow-Methods：從路由 methods 產生。
+			methodList := make([]string, 0, len(r.Methods))
+			for _, m := range r.Methods {
+				methodList = append(methodList, strings.ToUpper(m))
+			}
+			corsHeaders["Access-Control-Allow-Methods"] = strings.Join(methodList, ", ")
+
+			// Access-Control-Allow-Headers：從 content_type 推導。
+			allowHeaders := []string{"Content-Type"}
+			if r.ContentType == "application/json" || r.ContentType == "application/x-www-form-urlencoded" {
+				allowHeaders = append(allowHeaders, "Authorization")
+			}
+			corsHeaders["Access-Control-Allow-Headers"] = strings.Join(allowHeaders, ", ")
+
+			// Access-Control-Max-Age：快取 preflight 結果 24 小時。
+			corsHeaders["Access-Control-Max-Age"] = "86400"
+
+			routeCorsAutoHeadersMap[r.Path] = corsHeaders
+		}
 
 		// 若設定了 Content-Type，後續會用於請求本文類型檢查。
 		if r.ContentType != "" {
@@ -493,6 +536,12 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		// 保存此路由的日誌時間日期格式。
 		if r.TimeFormat != nil {
 			routeTimeFormatsMap[r.Path] = r.TimeFormat
+		}
+
+		// 保存此路由的自訂回應標頭。
+		if len(r.ResponseHeaders) > 0 {
+			routeResponseHeadersMap[r.Path] = r.ResponseHeaders
+			LogBridge("路徑 %s: 載入 %d 個自訂回應標頭", r.Path, len(r.ResponseHeaders))
 		}
 
 		// 建立並編譯請求本文 JSON Schema。
@@ -660,6 +709,41 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		forwardMaxConcurrent:         bridgeMaxConcurrent,
 		routeForwardSem:              routeForwardSem,
 		routeForwardMaxConcurrent:    routeForwardMaxConcurrent,
+		bridgeResponseHeaders:        bridgeResponseHeaders,
+		routeResponseHeaders:         routeResponseHeadersMap,
+		routeCorsAutoHeaders:         routeCorsAutoHeadersMap,
+	}
+}
+
+// mergeResponseHeaders 會將橋接層全域與路由層級的自訂回應標頭合併至回應中。
+//
+// 合併規則：
+//   - 若回應尚未初始化 Headers，會先建立空 map。
+//   - 先套用橋接層全域標頭，再套用路由層級標頭。
+//   - 路由層級標頭若與全域同名，會覆蓋全域值。
+func (h *BridgeHandler) mergeResponseHeaders(path string, resp *nyaapiserver.HTTPResponse) {
+	// 確保回應的 Headers 不為 nil。
+	if resp.Headers == nil {
+		resp.Headers = make(map[string]string)
+	}
+
+	// 先套用橋接層全域自訂回應標頭。
+	for k, v := range h.bridgeResponseHeaders {
+		resp.Headers[k] = v
+	}
+
+	// 再套用自動產生的 CORS 標頭（覆蓋 bridgeResponseHeaders 同名標頭）。
+	if cors, ok := h.routeCorsAutoHeaders[path]; ok {
+		for k, v := range cors {
+			resp.Headers[k] = v
+		}
+	}
+
+	// 最後套用路由層級自訂回應標頭（最高優先，覆蓋所有前述標頭）。
+	if rh, ok := h.routeResponseHeaders[path]; ok {
+		for k, v := range rh {
+			resp.Headers[k] = v
+		}
 	}
 }
 
@@ -681,7 +765,12 @@ func (h *BridgeHandler) Handle(req *nyaapiserver.HTTPRequest) *nyaapiserver.HTTP
 		h.httpSem <- struct{}{}
 		defer func() { <-h.httpSem }()
 	}
-	return h.handleRequest(req)
+	resp := h.handleRequest(req)
+
+	// 套用自訂回應標頭（橋接層全域 + 路由層級）。
+	h.mergeResponseHeaders(req.Path, resp)
+
+	return resp
 }
 
 // checkConcurrentWarn 檢查並行數是否已達 ≥90% 上限，若是則輸出警告日誌。
@@ -765,6 +854,15 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 				}
 				return h.errResp(405, LHTTP.HttpMethodNotAllowed(),
 					fmt.Sprintf(LHTTP.HttpDetailMethod(), req.Method, strings.Join(allowedList, ", ")), clientIP)
+			}
+		}
+
+		// OPTIONS 請求（CORS preflight）由橋接層直接回應，不轉發至 NATS 微服務。
+		if req.Method == "OPTIONS" {
+			LogBridge("OPTIONS preflight: path=%s, client=%s", req.Path, clientIP)
+			return &nyaapiserver.HTTPResponse{
+				StatusCode: 204,
+				Body:       nil,
 			}
 		}
 

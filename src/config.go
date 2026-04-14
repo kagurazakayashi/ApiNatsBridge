@@ -377,6 +377,13 @@ type BridgeConfig struct {
 	// 此限制作用於整個 HTTP 請求處理流程，包含令牌驗證與 NATS 轉發。
 	// 接近上限（≥90%）時會在日誌中輸出警告。
 	HTTPMaxConcurrent int `json:"http_max_concurrent,omitempty" yaml:"http_max_concurrent,omitempty"`
+
+	// ResponseHeaders 定義橋接層全域自訂回應標頭。
+	//
+	// 這些標頭會附加到所有 HTTP 回應中，可用於設定 CORS 標頭、
+	// 安全性標頭或其他自訂回應標頭。
+	// 路由層級的 response_headers 會覆蓋全域同名標頭。
+	ResponseHeaders map[string]string `json:"response_headers,omitempty" yaml:"response_headers,omitempty"`
 }
 
 // RouteConfig 定義單一路由的 HTTP 到 NATS 轉發規則。
@@ -470,6 +477,12 @@ type RouteConfig struct {
 	// 用於保護特定後端微服務不被過量請求淹沒。
 	// 超限時回傳 HTTP 503。
 	MaxConcurrent int `json:"max_concurrent,omitempty" yaml:"max_concurrent,omitempty"`
+
+	// ResponseHeaders 定義此路由的自訂回應標頭。
+	//
+	// 這些標頭會附加到此路由的所有 HTTP 回應中。
+	// 若與 bridge.response_headers 中的同名標頭衝突，路由層級設定優先。
+	ResponseHeaders map[string]string `json:"response_headers,omitempty" yaml:"response_headers,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。
