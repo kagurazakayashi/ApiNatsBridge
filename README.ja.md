@@ -124,6 +124,16 @@ git submodule update
 git submodule update --init
 ```
 
+### サブモジュールの強制更新（ローカル変更を無視）
+
+サブモジュールにローカルの変更があり通常の更新ができない場合、以下のコマンドを使用します：
+
+```bash
+# サブモジュール内のすべてのローカル変更を破棄し、強制更新
+git submodule foreach --recursive "git reset --hard && git clean -fd"
+git submodule update --init --recursive --force
+```
+
 ### go-gen-l10n ツールのビルド
 
 サブモジュール `libNyaruko_Go` にはローカライズコード生成ツール `go-gen-l10n` が含まれています。そのディレクトリに入り、リソースを生成してビルドします：

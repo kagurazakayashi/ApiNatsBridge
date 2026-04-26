@@ -825,7 +825,8 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 	}
 
 	// 若啟用了令牌驗證且此路徑不在白名單中，先執行令牌檢查。
-	if h.tokenCfg != nil {
+	// OPTIONS 請求（CORS preflight）不進行令牌驗證，由後續流程直接回應。
+	if h.tokenCfg != nil && req.Method != "OPTIONS" {
 		if _, isBypass := h.tokenPathSet[req.Path]; !isBypass {
 			if resp := h.verifyToken(req, clientIP); resp != nil {
 				return resp

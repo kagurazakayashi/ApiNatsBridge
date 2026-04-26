@@ -124,6 +124,16 @@ git submodule update
 git submodule update --init
 ```
 
+### 强制更新子模块（忽略本地更改）
+
+如果子模块有本地修改导致无法正常更新，可使用以下命令：
+
+```bash
+# 放弃子模块中的所有本地更改，然后强制更新
+git submodule foreach --recursive "git reset --hard && git clean -fd"
+git submodule update --init --recursive --force
+```
+
 ### 编译 go-gen-l10n 工具
 
 子模块 `libNyaruko_Go` 中包含本地化代码生成工具 `go-gen-l10n`。进入其目录，生成资源并编译：

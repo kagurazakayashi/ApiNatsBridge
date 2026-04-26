@@ -124,6 +124,16 @@ Or combine into a single command:
 git submodule update --init
 ```
 
+### Force Update Submodules (Ignore Local Changes)
+
+If submodules have local modifications that prevent normal updates, use:
+
+```bash
+# Discard all local changes in submodules, then force update
+git submodule foreach --recursive "git reset --hard && git clean -fd"
+git submodule update --init --recursive --force
+```
+
 ### Building the go-gen-l10n Tool
 
 The submodule `libNyaruko_Go` includes the localization code generation tool `go-gen-l10n`. Enter its directory, generate resources, and build:

@@ -124,6 +124,16 @@ git submodule update
 git submodule update --init
 ```
 
+### 強制更新子模組（忽略本機更改）
+
+如果子模組有本機修改導致無法正常更新，可使用以下命令：
+
+```bash
+# 捨棄子模組中的所有本機更改，然後強制更新
+git submodule foreach --recursive "git reset --hard && git clean -fd"
+git submodule update --init --recursive --force
+```
+
 ### 編譯 go-gen-l10n 工具
 
 子模組 `libNyaruko_Go` 中包含在地化程式碼產生工具 `go-gen-l10n`。進入其目錄，產生資源並編譯：
