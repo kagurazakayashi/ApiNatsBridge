@@ -798,22 +798,22 @@ ApiNatsBridge can optionally validate authentication tokens on incoming HTTP req
 
 ```
 ┌──────────┐      HTTP        ┌───────────────────┐      NATS        ┌────────────────┐
-│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID!token      │  UserValidator │
+│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID|2|token    │  UserValidator │
 │  Client  │ ────────────────>│  (Gateway/Bridge) │ ────────────────>│  (NATS Micro)  │
 │          │ <────────────────│                   │ <────────────────│                │
-└──────────┘  HTTP 200/401    └───────────────────┘  UUID|result     └────────────────┘
+└──────────┘  HTTP 200/401    └───────────────────┘  UUID|{JSON}     └────────────────┘
 ```
 
 **Step-by-step:**
 
 1. **Client → ApiNatsBridge (HTTP)**: Client sends an HTTP request with the token in the configured header (e.g., `Authorization: v2.local.FcG...`)
 
-2. **ApiNatsBridge → UserValidator (NATS Request)**: Bridge generates a UUID tag, appends `!` (compact mode), and sends `UUID!token` to the configured NATS subject (`auth.token.verify` by default)
+2. **ApiNatsBridge → UserValidator (NATS Request)**: Bridge generates a UUID tag and sends `UUID|2|token` (level 2: system + token claims) to the configured NATS subject (`auth.token.verify` by default)
 
-3. **UserValidator → ApiNatsBridge (NATS Reply)**: Validator returns `UUID|result` — where `result` is `0` for valid, or an error code (`2`/`3`/`4`) for invalid
+3. **UserValidator → ApiNatsBridge (NATS Reply)**: Validator returns `UUID|{"success":bool,...}` — where `success:true` means valid (with `username`/`app`/`sub`/`iat`/`exp` claims), `success:false` means invalid (with `message` error)
 
 4. **ApiNatsBridge → Client (HTTP Response)**:
-   - Valid token (`UUID|0`): Request proceeds to the backend microservice
+   - Valid token: Request proceeds to the backend microservice
    - Invalid token: Returns HTTP 401 with `{"error":"Unauthorized: invalid token"}`
    - NATS error: Returns HTTP 502 with `{"error":"Bad Gateway: token verification request failed"}`
    - Missing token: Returns HTTP 401 with `{"error":"Unauthorized: missing authentication token"}`
@@ -822,12 +822,12 @@ ApiNatsBridge can optionally validate authentication tokens on incoming HTTP req
 
 | Direction | Format | Example |
 |-----------|--------|---------|
-| ApiNatsBridge → UserValidator | `UUID!token` | `550e8400-e29b-41d4-a716-446655440000!v2.local.FcG...` |
-| UserValidator → ApiNatsBridge (valid) | `UUID\|0` | `550e8400-e29b-41d4-a716-446655440000\|0` |
-| UserValidator → ApiNatsBridge (expired) | `UUID\|4` | `550e8400-e29b-41d4-a716-446655440000\|4` |
+| ApiNatsBridge → UserValidator | `UUID\|2\|token` | `550e8400-e29b-41d4-a716-446655440000\|2\|v2.local.FcG...` |
+| UserValidator → ApiNatsBridge (valid) | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iat":"...","exp":"..."}` |
+| UserValidator → ApiNatsBridge (invalid) | `UUID\|{"success":false,...}` | `550e8400-...\|{"success":false,"message":"token verification failed: ..."}` |
 
-- `!` after the tag indicates **compact mode** (returns integer error codes only)
-- `|` is the tag-result separator (configurable via `tag_separator`)
+- `|` is the field separator
+- Level `2` requests token claims (`username`/`app`/`sub`/`iat`/`exp`) without extra DB queries
 - For complete NATS-level protocol details, see [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實)
 
 ### Configuration

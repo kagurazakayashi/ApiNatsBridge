@@ -776,22 +776,22 @@ ApiNatsBridge はオプションで、受信 HTTP リクエストの認証トー
 
 ```
 ┌──────────┐      HTTP        ┌───────────────────┐      NATS        ┌────────────────┐
-│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID!token      │  UserValidator │
+│  HTTP    │  Authorization   │  ApiNatsBridge    │  UUID|2|token    │  UserValidator │
 │  クライ  │ ────────────────>│  (Gateway/Bridge) │ ────────────────>│  (NATS マイク) │
 │  アント  │ <────────────────│                   │ <────────────────│                │
-└──────────┘  HTTP 200/401    └───────────────────┘  UUID|結果       └────────────────┘
+└──────────┘  HTTP 200/401    └───────────────────┘  UUID|{JSON}     └────────────────┘
 ```
 
 **手順説明：**
 
 1. **クライアント → ApiNatsBridge（HTTP）**：クライアントが HTTP リクエストを送信し、指定されたヘッダー（デフォルト `Authorization`）にトークンを含めます（例：`Authorization: v2.local.FcG...`）
 
-2. **ApiNatsBridge → UserValidator（NATS Request）**：ブリッジが UUID タグを生成し、`!`（コンパクトモード）を付加して `UUID!トークン` を設定された NATS サブジェクト（デフォルト `auth.token.verify`）に送信します
+2. **ApiNatsBridge → UserValidator（NATS Request）**：ブリッジが UUID タグを生成し、レベル 2 形式で `UUID|2|トークン`（レベル 2：システム＋トークン claims）を設定された NATS サブジェクト（デフォルト `auth.token.verify`）に送信します
 
-3. **UserValidator → ApiNatsBridge（NATS Reply）**：バリデーターが `UUID|結果` を返します — `結果` が `0` なら有効、`2`/`3`/`4` は異なるエラーを示します
+3. **UserValidator → ApiNatsBridge（NATS Reply）**：バリデーターが `UUID|{"success":bool,...}` を返します — `success:true` は有効（`username`/`app`/`sub`/`iat`/`exp` claims を含む）、`success:false` は無効（`message` エラーメッセージを含む）
 
 4. **ApiNatsBridge → クライアント（HTTP Response）**：
-   - トークン有効（`UUID|0`）：リクエストはバックエンドマイクロサービスへ転送されます
+   - トークン有効：リクエストはバックエンドマイクロサービスへ転送されます
    - トークン無効：HTTP 401 を返却、`{"error":"Unauthorized: invalid token"}`
    - NATS エラー：HTTP 502 を返却、`{"error":"Bad Gateway: token verification request failed"}`
    - トークン不在：HTTP 401 を返却、`{"error":"Unauthorized: missing authentication token"}`
@@ -800,12 +800,12 @@ ApiNatsBridge はオプションで、受信 HTTP リクエストの認証トー
 
 | 方向 | 形式 | 例 |
 |------|------|-----|
-| ApiNatsBridge → UserValidator | `UUID!トークン` | `550e8400-e29b-41d4-a716-446655440000!v2.local.FcG...` |
-| UserValidator → ApiNatsBridge（有効） | `UUID\|0` | `550e8400-e29b-41d4-a716-446655440000\|0` |
-| UserValidator → ApiNatsBridge（期限切れ） | `UUID\|4` | `550e8400-e29b-41d4-a716-446655440000\|4` |
+| ApiNatsBridge → UserValidator | `UUID\|2\|トークン` | `550e8400-e29b-41d4-a716-446655440000\|2\|v2.local.FcG...` |
+| UserValidator → ApiNatsBridge（有効） | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iat":"...","exp":"..."}` |
+| UserValidator → ApiNatsBridge（無効） | `UUID\|{"success":false,...}` | `550e8400-...\|{"success":false,"message":"token verification failed: ..."}` |
 
-- タグの後の `!` は**コンパクトモード**（整数エラーコードのみを返す）を示します
-- `|` はタグと結果の区切り文字です（`tag_separator` で設定可能）
+- `|` はフィールド区切り文字です
+- レベル `2` はトークン claims（`username`/`app`/`sub`/`iat`/`exp`）を取得でき、追加の DB クエリは不要です
 - NATS レベルの完全なプロトコル詳細は [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實) を参照してください
 
 ### 設定

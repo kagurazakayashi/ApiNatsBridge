@@ -1190,6 +1190,20 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 	return ""
 }
 
+// tokenVerifyReply 解析 NyarukoLogin 層級 2 令牌核實的 JSON 回覆內容。
+//
+// 回覆格式為 tag|{"success":bool, "username":"...", "app":"...", "sub":"...", "iat":"...", "exp":"..."}
+// 失敗時為 tag|{"success":false, "message":"..."}
+type tokenVerifyReply struct {
+	Success  bool   `json:"success"`            // 核實是否成功
+	Username string `json:"username,omitempty"` // 令牌所屬使用者名稱
+	App      string `json:"app,omitempty"`      // 令牌對應的應用程式識別名稱
+	Sub      string `json:"sub,omitempty"`      // 令牌主體
+	Iat      string `json:"iat,omitempty"`      // 簽發時間（ISO 8601）
+	Exp      string `json:"exp,omitempty"`      // 到期時間（ISO 8601）
+	Message  string `json:"message,omitempty"`  // 錯誤訊息（核實失敗時）
+}
+
 // generateTokenTag 產生一個唯一的 UUID tag 字串，用於令牌驗證請求匹配。
 //
 // tag 使用 UUID v4 格式（xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx），
@@ -1204,7 +1218,7 @@ func (h *BridgeHandler) generateTokenTag() string {
 //   - 從指定的 HTTP 標頭中提取令牌
 //   - 檢查令牌長度是否符合最小與最大限制
 //   - 查詢快取，若命中則直接回傳快取結果
-//   - 若快取未命中，產生唯一 UUID tag，發送 NATS Request（格式：tag!令牌）
+//   - 若快取未命中，產生唯一 UUID tag，以層級 2 格式發送 NATS Request（格式：tag|2|令牌）
 //   - 等待回覆，判斷回覆是否為 tag|SuccessValue（即 tag|0）
 //   - 將驗證結果寫入快取
 //
@@ -1264,9 +1278,11 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	h.tokenSem <- struct{}{}
 	defer func() { <-h.tokenSem }()
 
-	// 產生唯一 tag 並發送令牌驗證請求到 NATS。
+	// 產生唯一 tag 並以層級 2 格式發送令牌驗證請求到 NATS。
+	// 層級 2 可取得 token claims（username、app、sub、iat、exp），
+	// 無需額外 DB 查詢。
 	tag := h.generateTokenTag()
-	natsPayload := tag + "!" + token
+	natsPayload := tag + "|2|" + token
 	LogBridge(LLog.LogTokenCheck(), h.tokenSubject, tag)
 	GetNatsStats().RecordRequest()
 	if HasDebugNats() {
@@ -1282,35 +1298,39 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 		LogNatsBody(LLog.LogNatsBodyRecv(), h.tokenSubject, respStr)
 	}
 
-	// 分析回覆：格式為 tag|結果。
-	expectedPrefix := tag + h.tokenSeparator
-	expectedFull := expectedPrefix + h.tokenSuccessValue
+	// 解析層級 2 JSON 回覆：格式為 tag|{"success":bool,...}
 	respTrimmed := strings.TrimSpace(respStr)
-	tokenValid := respTrimmed == expectedFull
+	pipeIdx := strings.Index(respTrimmed, "|")
+	if pipeIdx == -1 {
+		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, "tag|JSON")
+		return h.errResp(401, LHTTP.HttpTokenInvalid(),
+			fmt.Sprintf("unexpected reply format (missing separator), got=%q", respTrimmed), clientIP)
+	}
 
-	// 將驗證結果寫入快取。
+	var reply tokenVerifyReply
+	if err := json.Unmarshal([]byte(respTrimmed[pipeIdx+1:]), &reply); err != nil {
+		LogBridge("令牌驗證回覆 JSON 解析失敗: tag=%s, resp=%s, err=%v", tag, respTrimmed, err)
+		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(),
+			fmt.Sprintf("failed to parse token verification reply: %v", err), clientIP)
+	}
+
+	// 寫入快取
 	h.tokenCacheMu.Lock()
 	if len(h.tokenCache) >= h.tokenCacheMax {
 		// 快取已滿，清空後再重新填入。
 		h.tokenCache = make(map[string]bool, h.tokenCacheMax)
 	}
-	h.tokenCache[token] = tokenValid
+	h.tokenCache[token] = reply.Success
 	h.tokenCacheMu.Unlock()
 
-	if !tokenValid {
-		// 回覆格式不符預期或令牌無效。
-		if !strings.HasPrefix(respTrimmed, expectedPrefix) {
-			LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, expectedFull)
-			return h.errResp(401, LHTTP.HttpTokenInvalid(),
-				fmt.Sprintf("unexpected reply format, got=%q, expected prefix=%q", respTrimmed, expectedPrefix), clientIP)
-		}
-		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, expectedFull)
+	if !reply.Success {
+		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, reply.Message)
 		return h.errResp(401, LHTTP.HttpTokenInvalid(),
-			fmt.Sprintf("token verification failed, reply=%q, expected=%q", respTrimmed, expectedFull), clientIP)
+			fmt.Sprintf("token verification failed: %s", reply.Message), clientIP)
 	}
 
-	// 令牌驗證成功。
-	LogBridge(LLog.LogTokenValid(), tag)
+	// 令牌驗證成功，輸出 claims 資訊
+	LogBridge("令牌驗證成功: tag=%s, user=%s, app=%s, sub=%s, iat=%s, exp=%s", tag, reply.Username, reply.App, reply.Sub, reply.Iat, reply.Exp)
 	return nil
 }
 

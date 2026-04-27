@@ -78,7 +78,7 @@ type TokenConfig struct {
 	// TagSeparator 定義 tag 部分的分隔符（預設：|）
 	//
 	// 此字元用於分隔請求 tag 與回傳內容。
-	// 發送到 NATS 的格式為 "tag!令牌"，
+	// 發送到 NATS 的格式為 "tag|2|令牌"，
 	// 回覆格式為 "tag|0" 或 "tag|{JSON}"。
 	TagSeparator string `json:"tag_separator,omitempty" yaml:"tag_separator,omitempty"`
 
