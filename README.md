@@ -810,7 +810,7 @@ ApiNatsBridge can optionally validate authentication tokens on incoming HTTP req
 
 2. **ApiNatsBridge → UserValidator (NATS Request)**: Bridge generates a UUID tag and sends `UUID|2|token` (level 2: system + token claims) to the configured NATS subject (`auth.token.verify` by default)
 
-3. **UserValidator → ApiNatsBridge (NATS Reply)**: Validator returns `UUID|{"success":bool,...}` — where `success:true` means valid (with `username`/`app`/`sub`/`iat`/`exp` claims), `success:false` means invalid (with `message` error)
+3. **UserValidator → ApiNatsBridge (NATS Reply)**: Validator returns `UUID|{"success":bool,...}` — where `success:true` means valid (with all standard PASETO claims: `username`/`app`/`sub`/`iss`/`iat`/`nbf`/`exp`/`jti`), `success:false` means invalid (with `message` error)
 
 4. **ApiNatsBridge → Client (HTTP Response)**:
    - Valid token: Request proceeds to the backend microservice
@@ -823,11 +823,11 @@ ApiNatsBridge can optionally validate authentication tokens on incoming HTTP req
 | Direction | Format | Example |
 |-----------|--------|---------|
 | ApiNatsBridge → UserValidator | `UUID\|2\|token` | `550e8400-e29b-41d4-a716-446655440000\|2\|v2.local.FcG...` |
-| UserValidator → ApiNatsBridge (valid) | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iat":"...","exp":"..."}` |
+| UserValidator → ApiNatsBridge (valid) | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iss":"/auth/login","iat":"...","nbf":"...","exp":"...","jti":"abc123..."}` |
 | UserValidator → ApiNatsBridge (invalid) | `UUID\|{"success":false,...}` | `550e8400-...\|{"success":false,"message":"token verification failed: ..."}` |
 
 - `|` is the field separator
-- Level `2` requests token claims (`username`/`app`/`sub`/`iat`/`exp`) without extra DB queries
+- Level `2` returns all standard PASETO claims (`username`/`app`/`sub`/`iss`/`iat`/`nbf`/`exp`/`jti`) without extra DB queries
 - For complete NATS-level protocol details, see [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實)
 
 ### Configuration

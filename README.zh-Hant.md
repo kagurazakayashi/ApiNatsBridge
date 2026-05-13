@@ -788,7 +788,7 @@ ApiNatsBridge 可選擇性地對傳入的 HTTP 請求執行驗證令牌校驗。
 
 2. **ApiNatsBridge → UserValidator（NATS Request）**：橋接器產生一個 UUID tag，以層級 2 格式發送 `UUID|2|令牌`（層級 2：系統＋token claims）到設定的 NATS 主題（預設 `auth.token.verify`）
 
-3. **UserValidator → ApiNatsBridge（NATS Reply）**：驗證器回傳 `UUID|{"success":bool,...}` — 其中 `success:true` 表示有效（含 `username`/`app`/`sub`/`iat`/`exp` claims），`success:false` 表示無效（含 `message` 錯誤訊息）
+3. **UserValidator → ApiNatsBridge（NATS Reply）**：驗證器回傳 `UUID|{"success":bool,...}` — 其中 `success:true` 表示有效（含全部標準 PASETO claims：`username`/`app`/`sub`/`iss`/`iat`/`nbf`/`exp`/`jti`），`success:false` 表示無效（含 `message` 錯誤訊息）
 
 4. **ApiNatsBridge → 用戶端（HTTP Response）**：
    - 令牌有效：請求繼續轉送至後端微服務
@@ -801,11 +801,11 @@ ApiNatsBridge 可選擇性地對傳入的 HTTP 請求執行驗證令牌校驗。
 | 方向 | 格式 | 範例 |
 |------|------|------|
 | ApiNatsBridge → UserValidator | `UUID\|2\|令牌` | `550e8400-e29b-41d4-a716-446655440000\|2\|v2.local.FcG...` |
-| UserValidator → ApiNatsBridge（有效） | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iat":"...","exp":"..."}` |
+| UserValidator → ApiNatsBridge（有效） | `UUID\|{"success":true,...}` | `550e8400-...\|{"success":true,"username":"admin","app":"myapp","sub":"admin","iss":"/auth/login","iat":"...","nbf":"...","exp":"...","jti":"abc123..."}` |
 | UserValidator → ApiNatsBridge（無效） | `UUID\|{"success":false,...}` | `550e8400-...\|{"success":false,"message":"token verification failed: ..."}` |
 
 - `|` 為欄位分隔符
-- 層級 `2` 可取得 token claims（`username`/`app`/`sub`/`iat`/`exp`），無需額外 DB 查詢
+- 層級 `2` 可取得全部標準 PASETO claims（`username`/`app`/`sub`/`iss`/`iat`/`nbf`/`exp`/`jti`），無需額外 DB 查詢
 - 完整的 NATS 層級通訊協定詳情，請參見 [NyarukoLogin UserValidator README](https://github.com/kagurazakayashi/NyarukoLogin/blob/master/UserValidator/README.md#authtokenverify--直接-nats-介面令牌核實)
 
 ### 設定

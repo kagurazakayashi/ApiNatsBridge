@@ -1192,16 +1192,19 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 
 // tokenVerifyReply 解析 NyarukoLogin 層級 2 令牌核實的 JSON 回覆內容。
 //
-// 回覆格式為 tag|{"success":bool, "username":"...", "app":"...", "sub":"...", "iat":"...", "exp":"..."}
+// 回覆格式為 tag|{"success":bool, "username":"...", "app":"...", "sub":"...", "iss":"...", "iat":"...", "nbf":"...", "exp":"...", "jti":"..."}
 // 失敗時為 tag|{"success":false, "message":"..."}
 type tokenVerifyReply struct {
-	Success  bool   `json:"success"`            // 核實是否成功
-	Username string `json:"username,omitempty"` // 令牌所屬使用者名稱
-	App      string `json:"app,omitempty"`      // 令牌對應的應用程式識別名稱
-	Sub      string `json:"sub,omitempty"`      // 令牌主體
-	Iat      string `json:"iat,omitempty"`      // 簽發時間（ISO 8601）
-	Exp      string `json:"exp,omitempty"`      // 到期時間（ISO 8601）
-	Message  string `json:"message,omitempty"`  // 錯誤訊息（核實失敗時）
+	Success   bool   `json:"success"`            // 核實是否成功
+	Username  string `json:"username,omitempty"` // 令牌所屬使用者名稱
+	App       string `json:"app,omitempty"`      // 令牌對應的應用程式識別名稱
+	Sub       string `json:"sub,omitempty"`      // 令牌主體
+	Iss       string `json:"iss,omitempty"`      // 簽發者
+	Iat       string `json:"iat,omitempty"`      // 簽發時間（ISO 8601）
+	Nbf       string `json:"nbf,omitempty"`      // 生效時間（ISO 8601）
+	Exp       string `json:"exp,omitempty"`      // 到期時間（ISO 8601）
+	Jti       string `json:"jti,omitempty"`      // 唯一識別碼（JWT ID）
+	Message   string `json:"message,omitempty"`  // 錯誤訊息（核實失敗時）
 }
 
 // generateTokenTag 產生一個唯一的 UUID tag 字串，用於令牌驗證請求匹配。
@@ -1330,7 +1333,8 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	}
 
 	// 令牌驗證成功，輸出 claims 資訊
-	LogBridge("令牌驗證成功: tag=%s, user=%s, app=%s, sub=%s, iat=%s, exp=%s", tag, reply.Username, reply.App, reply.Sub, reply.Iat, reply.Exp)
+	LogBridge("令牌驗證成功: tag=%s, user=%s, app=%s, sub=%s, iss=%s, iat=%s, nbf=%s, exp=%s, jti=%s",
+		tag, reply.Username, reply.App, reply.Sub, reply.Iss, reply.Iat, reply.Nbf, reply.Exp, reply.Jti)
 	return nil
 }
 
