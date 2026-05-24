@@ -625,6 +625,7 @@ routes:
 | `error_info_show`  | int      | 0               | 微服務錯誤資訊顯示模式（覆蓋 bridge 層級）；0=不記錄、1=記錄、2=記錄+白名單可見、3=記錄+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見 |
 | `time_format`      | string   | -               | 路由層級日誌時間日期顯示格式（覆蓋 bridge 層級）；語義同 bridge 層的 `time_format` |
 | `max_concurrent` | int | `0`（沿用全域） | 路由層級最大並行 NATS 轉發請求數；0 表示沿用全域限制；超限時回傳 503 |
+| `token_fields` | []string | - | 從令牌驗證回覆中提取並注入 BridgeRequest 的欄位清單。範例：`["uuid", "username"]`。可用欄位：所有標準 PASETO claims（`username`、`app`、`sub`、`iss`、`iat`、`nbf`、`exp`、`jti`）及透過 UserValidator `custom_claims` 寫入的自訂 claims（如 `uuid`）。僅對不在 `token.path_whitelist` 中的路由生效 |
 
 #### `return_fields` 可選值
 
@@ -638,6 +639,34 @@ routes:
 | `ip`          | 解析後的真實用戶端 IP            |
 | `params`      | URL 查詢參數和表單參數（鍵值對） |
 | `body`        | 請求主體原始內容                 |
+
+#### `token_fields` — 將令牌 Claims 注入 BridgeRequest
+
+啟用令牌驗證後，若路由配置了 `token_fields`，驗證成功後橋接器會從驗證回覆中提取指定欄位，並以 `_token` 物件的形式注入到轉發給下游微服務的 BridgeRequest 中。
+
+```yaml
+routes:
+  - path: "/api/user"
+    nats_subject: "user.get"
+    return_fields: ["method", "path", "body"]
+    token_fields: ["uuid", "username"]   # 從驗證後的令牌中提取這些欄位
+```
+
+轉發給下游的 BridgeRequest 將包含：
+```json
+{
+  "_token": {"uuid": "550e8400-...", "username": "admin"},
+  "method": "GET",
+  "path": "/api/user",
+  "body": "..."
+}
+```
+
+`_token` 物件僅在以下條件同時滿足時注入：
+- 該路由不在 `token.path_whitelist` 中（令牌實際被驗證）
+- 令牌驗證成功
+- `token_fields` 至少配置了一個欄位名
+- 該欄位在驗證回覆中存在
 
 #### `schema_body` JSON Schema 驗證
 
@@ -839,10 +868,13 @@ bridge:
 | `timeout` | int | `5` | NATS 請求超時秒數 |
 | `cache_max_entries` | int | `1000` | 快取的驗證結果最大筆數，達上限時清空快取 |
 | `max_concurrent` | int | `256` | 最大並行令牌驗證 NATS 請求數，超限時回傳 HTTP 503 |
+| `paseto_secret_key` | any | - | 選填 PASETO 本地解密金鑰。支援十六進位字串或 `{時間戳: 金鑰}` 金鑰輪替字典（格式與 NyarukoLogin UserValidator 相同） |
 
 > **注意：** 令牌驗證**預設為停用**。若要啟用，必須在設定檔中明確加入 `token` 區塊。
 >
 > tag 使用 **UUID v4**（如 `550e8400-e29b-41d4-a716-446655440000`），僅包含十六進位字元與連字號，保證不含 `?` 和 `!` 字元。
+>
+> 透過 UserValidator 的 `token_claims_mapping.custom_claims` 寫入令牌的自訂 claims（如 `uuid`）會自動包含在層級 2 驗證回覆中，可透過路由的 `token_fields` 提取。
 
 ### 令牌快取
 

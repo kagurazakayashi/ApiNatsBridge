@@ -262,6 +262,12 @@ type BridgeHandler struct {
 	// 若未設定或集合為空，表示轉發完整 BridgeRequest。
 	routeReturnFields map[string]map[string]struct{}
 
+	// routeTokenFields 是各路徑要從令牌驗證回覆中提取並注入 BridgeRequest 的欄位清單。
+	//
+	// key 為 HTTP 路徑，value 為要提取的欄位名稱清單。
+	// 提取後的欄位會以 "_token" 物件形式注入 BridgeRequest。
+	routeTokenFields map[string][]string
+
 	// routeHTTPCodeKeys 是各路徑微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
 	//
 	// 若為空，表示該路由不從回應中提取 HTTP 狀態碼。
@@ -333,8 +339,8 @@ type BridgeHandler struct {
 
 	// tokenCache 是令牌驗證結果快取。
 	//
-	// key 為令牌完整字串，value 為驗證結果（true=有效, false=無效）。
-	tokenCache map[string]bool
+	// key 為令牌完整字串，value 為驗證結果（nil 表示未快取或無效；非 nil 表示有效且包含 claims）。
+	tokenCache map[string]*tokenVerifyReply
 
 	// tokenCacheMu 保護 tokenCache 的並行存取安全。
 	tokenCacheMu sync.Mutex
@@ -432,6 +438,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 	routeSchemaMaps := make(map[string]map[string]interface{})
 	routeLimitsMap := make(map[string]*LimitRule)
 	returnFieldsMap := make(map[string]map[string]struct{})
+	tokenFieldsMap := make(map[string][]string)
 	routeHTTPCodeKeyMap := make(map[string]string)
 	routeErrorCodeKeyMap := make(map[string]string)
 	routeResponseSchemas := make(map[string]*jsonschema.Schema)
@@ -512,6 +519,12 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 				fieldSet[f] = struct{}{}
 			}
 			returnFieldsMap[r.Path] = fieldSet
+		}
+
+		// 保存此路由的 token_fields：從令牌驗證回覆中提取的欄位清單。
+		if len(r.TokenFields) > 0 {
+			tokenFieldsMap[r.Path] = r.TokenFields
+			LogBridge("路徑 %s: 令牌欄位注入 (_token): %v", r.Path, r.TokenFields)
 		}
 
 		// 保存此路由的 HTTP 狀態碼鍵名設定。
@@ -616,7 +629,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 
 	// 初始化令牌驗證設定。
 	tokenPathSet := make(map[string]struct{})
-	var tokenCache map[string]bool
+	var tokenCache map[string]*tokenVerifyReply
 	var tokenSubject, tokenHeaderName, tokenSeparator, tokenSuccessValue string
 	var tokenMinLen, tokenMaxLen, tokenCacheMax, tokenMaxConcurrent int
 	var tokenTimeout time.Duration
@@ -625,7 +638,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		for _, p := range tokenCfg.PathWhitelist {
 			tokenPathSet[p] = struct{}{}
 		}
-		tokenCache = make(map[string]bool)
+		tokenCache = make(map[string]*tokenVerifyReply)
 		tokenSubject = tokenCfg.EffectiveNatsSubject()
 		tokenHeaderName = tokenCfg.EffectiveHeaderName()
 		tokenMinLen = tokenCfg.EffectiveMinLength()
@@ -673,6 +686,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		limits:                       limits,
 		routeLimits:                  routeLimitsMap,
 		routeReturnFields:            returnFieldsMap,
+		routeTokenFields:            tokenFieldsMap,
 		routeHTTPCodeKeys:            routeHTTPCodeKeyMap,
 		routeErrorCodeKeys:           routeErrorCodeKeyMap,
 		routeResponseSchemas:         routeResponseSchemas,
@@ -826,10 +840,13 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 
 	// 若啟用了令牌驗證且此路徑不在白名單中，先執行令牌檢查。
 	// OPTIONS 請求（CORS preflight）不進行令牌驗證，由後續流程直接回應。
+	var tokenClaims map[string]interface{}
 	if h.tokenCfg != nil && req.Method != "OPTIONS" {
 		if _, isBypass := h.tokenPathSet[req.Path]; !isBypass {
-			if resp := h.verifyToken(req, clientIP); resp != nil {
-				return resp
+			var tokenErr *nyaapiserver.HTTPResponse
+			tokenErr, tokenClaims = h.verifyToken(req, clientIP)
+			if tokenErr != nil {
+				return tokenErr
 			}
 		} else {
 			LogBridge(LLog.LogTokenBypass(), req.Path)
@@ -945,7 +962,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 			req.Body = jsonBody
 
 			// 表單轉換完成後，進入 NATS 轉發流程。
-			return h.forwardToNats(req, natsSubject, clientIP)
+			return h.forwardToNats(req, natsSubject, clientIP, tokenClaims)
 		}
 
 		// 非表單請求若設定了 Schema，則將 body 視為 JSON 並進行驗證。
@@ -965,7 +982,7 @@ func (h *BridgeHandler) handleRequest(req *nyaapiserver.HTTPRequest) *nyaapiserv
 		}
 
 		// 所有檢查通過後，將請求送往對應 NATS Subject。
-		return h.forwardToNats(req, natsSubject, clientIP)
+		return h.forwardToNats(req, natsSubject, clientIP, tokenClaims)
 	}
 
 	// 未命中設定路由，先檢查是否違反全域限制（path、body、headers 等）。
@@ -1194,17 +1211,19 @@ func (h *BridgeHandler) resolveClientIP(headers map[string]string, remoteAddr st
 //
 // 回覆格式為 tag|{"success":bool, "username":"...", "app":"...", "sub":"...", "iss":"...", "iat":"...", "nbf":"...", "exp":"...", "jti":"..."}
 // 失敗時為 tag|{"success":false, "message":"..."}
+// 自訂 claims（如 uuid）會以額外欄位形式出現在成功回覆中，透過 Raw 欄位捕獲
 type tokenVerifyReply struct {
-	Success   bool   `json:"success"`            // 核實是否成功
-	Username  string `json:"username,omitempty"` // 令牌所屬使用者名稱
-	App       string `json:"app,omitempty"`      // 令牌對應的應用程式識別名稱
-	Sub       string `json:"sub,omitempty"`      // 令牌主體
-	Iss       string `json:"iss,omitempty"`      // 簽發者
-	Iat       string `json:"iat,omitempty"`      // 簽發時間（ISO 8601）
-	Nbf       string `json:"nbf,omitempty"`      // 生效時間（ISO 8601）
-	Exp       string `json:"exp,omitempty"`      // 到期時間（ISO 8601）
-	Jti       string `json:"jti,omitempty"`      // 唯一識別碼（JWT ID）
-	Message   string `json:"message,omitempty"`  // 錯誤訊息（核實失敗時）
+	Success  bool                   `json:"success"`            // 核實是否成功
+	Username string                 `json:"username,omitempty"` // 令牌所屬使用者名稱
+	App      string                 `json:"app,omitempty"`      // 令牌對應的應用程式識別名稱
+	Sub      string                 `json:"sub,omitempty"`      // 令牌主體
+	Iss      string                 `json:"iss,omitempty"`      // 簽發者
+	Iat      string                 `json:"iat,omitempty"`      // 簽發時間（ISO 8601）
+	Nbf      string                 `json:"nbf,omitempty"`      // 生效時間（ISO 8601）
+	Exp      string                 `json:"exp,omitempty"`      // 到期時間（ISO 8601）
+	Jti      string                 `json:"jti,omitempty"`      // 唯一識別碼（JWT ID）
+	Message  string                 `json:"message,omitempty"`  // 錯誤訊息（核實失敗時）
+	Raw      map[string]interface{} `json:"-"`                  // 原始回覆的全部欄位（含自訂 claims，不參與 JSON 序列化）
 }
 
 // generateTokenTag 產生一個唯一的 UUID tag 字串，用於令牌驗證請求匹配。
@@ -1220,13 +1239,15 @@ func (h *BridgeHandler) generateTokenTag() string {
 // 驗證流程：
 //   - 從指定的 HTTP 標頭中提取令牌
 //   - 檢查令牌長度是否符合最小與最大限制
-//   - 查詢快取，若命中則直接回傳快取結果
+//   - 查詢快取，若命中則直接回傳快取結果（含 claims）
 //   - 若快取未命中，產生唯一 UUID tag，以層級 2 格式發送 NATS Request（格式：tag|2|令牌）
-//   - 等待回覆，判斷回覆是否為 tag|SuccessValue（即 tag|0）
+//   - 等待回覆，解析 JSON 並提取所有欄位（含自訂 claims）
 //   - 將驗證結果寫入快取
 //
-// 若令牌有效，回傳 nil；否則回傳對應的 HTTP 錯誤回應。
-func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP string) *nyaapiserver.HTTPResponse {
+// 回傳值：
+//   - *nyaapiserver.HTTPResponse：驗證失敗時的 HTTP 錯誤回應；nil 表示驗證成功
+//   - map[string]interface{}：驗證成功時從令牌解密出的所有 claims（含自訂 claims）；驗證失敗時為 nil
+func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP string) (*nyaapiserver.HTTPResponse, map[string]interface{}) {
 	// 從 HTTP 標頭提取令牌。
 	token := req.Headers[h.tokenHeaderName]
 	if token == "" {
@@ -1235,7 +1256,7 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	if token == "" {
 		LogBridge("缺少驗證令牌: path=%s, header=%s", req.Path, h.tokenHeaderName)
 		return h.errResp(401, LHTTP.HttpTokenMissing(),
-			fmt.Sprintf("header %s not found or empty", h.tokenHeaderName), clientIP)
+			fmt.Sprintf("header %s not found or empty", h.tokenHeaderName), clientIP), nil
 	}
 
 	// 檢查令牌長度。
@@ -1243,21 +1264,21 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	if tokenLen < h.tokenMinLen || tokenLen > h.tokenMaxLen {
 		LogBridge("令牌長度無效: path=%s, len=%d, min=%d, max=%d", req.Path, tokenLen, h.tokenMinLen, h.tokenMaxLen)
 		return h.errResp(400, LHTTP.HttpTokenInvalidLength(),
-			fmt.Sprintf(LHTTP.HttpDetailTokenMinMax(), tokenLen, h.tokenMinLen, h.tokenMaxLen), clientIP)
+			fmt.Sprintf(LHTTP.HttpDetailTokenMinMax(), tokenLen, h.tokenMinLen, h.tokenMaxLen), clientIP), nil
 	}
 
 	// 查詢令牌驗證快取。
 	h.tokenCacheMu.Lock()
-	cachedResult, inCache := h.tokenCache[token]
+	cachedReply, inCache := h.tokenCache[token]
 	h.tokenCacheMu.Unlock()
 	if inCache {
-		if cachedResult {
+		if cachedReply != nil {
 			LogBridge("令牌驗證成功（快取命中）: path=%s", req.Path)
-			return nil
+			return nil, cachedReply.Raw
 		}
 		LogBridge("令牌驗證失敗（快取命中）: path=%s", req.Path)
 		return h.errResp(401, LHTTP.HttpTokenInvalid(),
-			fmt.Sprintf("token verification failed (cached), token length=%d", tokenLen), clientIP)
+			fmt.Sprintf("token verification failed (cached), token length=%d", tokenLen), clientIP), nil
 	}
 
 	// 令牌驗證並行控制：使用信號量限制同時進行中的驗證請求數量。
@@ -1266,7 +1287,7 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	if currentConcurrent >= h.tokenMaxConcurrent {
 		LogBridge(LLog.LogTokenConcurrentFull(), h.tokenMaxConcurrent)
 		return h.errResp(503, LHTTP.HttpTokenConcurrentFull(),
-			fmt.Sprintf("max concurrent verifications reached (%d)", h.tokenMaxConcurrent), clientIP)
+			fmt.Sprintf("max concurrent verifications reached (%d)", h.tokenMaxConcurrent), clientIP), nil
 	}
 
 	// 接近上限時輸出警告（≥90%）。
@@ -1294,7 +1315,7 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	respStr, err := h.natsClient.Request(h.tokenSubject, natsPayload, h.tokenTimeout)
 	if err != nil {
 		GetNatsStats().RecordError()
-		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(), err.Error(), clientIP)
+		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(), err.Error(), clientIP), nil
 	}
 	GetNatsStats().RecordReply()
 	if HasDebugNats() {
@@ -1307,35 +1328,51 @@ func (h *BridgeHandler) verifyToken(req *nyaapiserver.HTTPRequest, clientIP stri
 	if pipeIdx == -1 {
 		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, "tag|JSON")
 		return h.errResp(401, LHTTP.HttpTokenInvalid(),
-			fmt.Sprintf("unexpected reply format (missing separator), got=%q", respTrimmed), clientIP)
+			fmt.Sprintf("unexpected reply format (missing separator), got=%q", respTrimmed), clientIP), nil
 	}
 
-	var reply tokenVerifyReply
-	if err := json.Unmarshal([]byte(respTrimmed[pipeIdx+1:]), &reply); err != nil {
+	jsonPart := respTrimmed[pipeIdx+1:]
+
+	// 先解析為 raw map 以捕獲所有欄位（含自訂 claims 如 uuid）
+	var rawMap map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonPart), &rawMap); err != nil {
 		LogBridge("令牌驗證回覆 JSON 解析失敗: tag=%s, resp=%s, err=%v", tag, respTrimmed, err)
 		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(),
-			fmt.Sprintf("failed to parse token verification reply: %v", err), clientIP)
+			fmt.Sprintf("failed to parse token verification reply: %v", err), clientIP), nil
 	}
+
+	// 同時解析為結構體以取得型別化欄位
+	var reply tokenVerifyReply
+	if err := json.Unmarshal([]byte(jsonPart), &reply); err != nil {
+		LogBridge("令牌驗證回覆 JSON 解析失敗: tag=%s, resp=%s, err=%v", tag, respTrimmed, err)
+		return h.errResp(502, LHTTP.HttpTokenVerifyFailed(),
+			fmt.Sprintf("failed to parse token verification reply: %v", err), clientIP), nil
+	}
+	reply.Raw = rawMap
 
 	// 寫入快取
 	h.tokenCacheMu.Lock()
 	if len(h.tokenCache) >= h.tokenCacheMax {
 		// 快取已滿，清空後再重新填入。
-		h.tokenCache = make(map[string]bool, h.tokenCacheMax)
+		h.tokenCache = make(map[string]*tokenVerifyReply, h.tokenCacheMax)
 	}
-	h.tokenCache[token] = reply.Success
+	if reply.Success {
+		h.tokenCache[token] = &reply
+	} else {
+		h.tokenCache[token] = nil
+	}
 	h.tokenCacheMu.Unlock()
 
 	if !reply.Success {
 		LogBridge(LLog.LogTokenInvalid(), tag, respTrimmed, reply.Message)
 		return h.errResp(401, LHTTP.HttpTokenInvalid(),
-			fmt.Sprintf("token verification failed: %s", reply.Message), clientIP)
+			fmt.Sprintf("token verification failed: %s", reply.Message), clientIP), nil
 	}
 
 	// 令牌驗證成功，輸出 claims 資訊
 	LogBridge("令牌驗證成功: tag=%s, user=%s, app=%s, sub=%s, iss=%s, iat=%s, nbf=%s, exp=%s, jti=%s",
 		tag, reply.Username, reply.App, reply.Sub, reply.Iss, reply.Iat, reply.Nbf, reply.Exp, reply.Jti)
-	return nil
+	return nil, rawMap
 }
 
 // isErrorDetailIP 會檢查指定 IP 是否位於錯誤詳細資訊白名單中。
@@ -1467,9 +1504,11 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 //
 // 若路由設定了 return_fields，則只會把指定欄位送往微服務；
 // 若未設定或集合為空，則會送出完整 BridgeRequest。
+// 若路由設定了 token_fields 且 tokenClaims 非 nil，則將指定欄位以 "_token" 物件
+// 形式注入 BridgeRequest，讓下游微服務可直接取得令牌中的使用者識別資訊（如 uuid）。
 // 回應若可解析為 BridgeResponse，會依其內容建立 HTTPResponse；
 // 若無法解析，則會將原始 NATS 回應本文以 200 狀態碼直接返回。
-func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string, clientIP string) *nyaapiserver.HTTPResponse {
+func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string, clientIP string, tokenClaims map[string]interface{}) *nyaapiserver.HTTPResponse {
 	// 取得此路由的欄位白名單，用於決定轉發 payload 的形狀。
 	fields, hasFields := h.routeReturnFields[req.Path]
 
@@ -1587,6 +1626,34 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 
 		// 將裁剪後的請求資料序列化為 JSON。
 		reqJSON, err = json.Marshal(data)
+	}
+
+	// --- 注入令牌 claims (_token) ---
+	// 若此路由設定了 token_fields 且驗證後有可用的令牌 claims，
+	// 則將指定欄位以 "_token" 物件形式注入 BridgeRequest，
+	// 供下游微服務直接取得令牌中的使用者識別資訊（如 uuid）。
+	tokenFields, hasTokenFields := h.routeTokenFields[req.Path]
+	if hasTokenFields && tokenClaims != nil && len(tokenFields) > 0 {
+		tokenData := make(map[string]interface{})
+		for _, field := range tokenFields {
+			if val, ok := tokenClaims[field]; ok {
+				tokenData[field] = val
+			}
+		}
+		if len(tokenData) > 0 {
+			// 嘗試將現有的 reqJSON 反序列化為 map，加入 _token 後重新序列化
+			var data map[string]interface{}
+			if json.Unmarshal(reqJSON, &data) != nil {
+				// 反序列化失敗（如 return_fields 僅指定了單一純量值），
+				// 建立包裝物件，將原始內容置於 _payload 欄位
+				data = map[string]interface{}{"_payload": string(reqJSON)}
+			}
+			data["_token"] = tokenData
+			reqJSON, err = json.Marshal(data)
+			if err != nil {
+				return h.errResp(500, LHTTP.HttpInternalErrorMarshalRequest(), err.Error(), clientIP)
+			}
+		}
 	}
 
 	// 若序列化失敗，代表橋接層內部資料無法轉成可傳輸格式。

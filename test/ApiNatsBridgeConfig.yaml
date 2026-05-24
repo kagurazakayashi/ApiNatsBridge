@@ -233,6 +233,11 @@ bridge:
   #   cache_max_entries: 1000
   #   # 令牌验证的最大并发请求数（默认值，超限时回传 HTTP 503）
   #   max_concurrent: 256
+  #   # PASETO 本地解密金鑰（選填，支援與 UserValidator 相同的格式）
+  #   # 若設定，ApiNatsBridge 可本地解密令牌以提取自訂 claims（如 uuid）
+  #   # paseto_secret_key: "404142..."
+  #   # paseto_secret_key:
+  #   #   1748736000: "404142..."
   #
   # # 全域转发 NATS 的最大并发请求数（0 = 不限制）
   # max_concurrent: 512
@@ -390,3 +395,6 @@ routes:
     # response_headers:
     #   Access-Control-Allow-Origin: "https://example.com"
     #   X-Custom-Header: "custom-value"
+    # 此路由的 token_fields：從令牌驗證回覆中提取指定欄位，
+    # 以 "_token" 物件注入 BridgeRequest 轉發給下游微服務
+    # token_fields: ["sub", "username"]

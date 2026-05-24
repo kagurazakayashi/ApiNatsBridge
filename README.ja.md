@@ -625,6 +625,7 @@ routes:
 | `error_info_show`  | int      | 0                | マイクロサービスエラー情報表示モード（bridge レベルを上書き）；0=記録しない、1=記録、2=記録+ホワイトリストに表示、3=記録+全員に表示、4=記録しない+ホワイトリストに表示、5=記録しない+全員に表示 |
 | `time_format`      | string   | -               | ルートレベルログタイムスタンプ表示形式（bridge レベルを上書き）；意味は bridge レベルの `time_format` と同じ |
 | `max_concurrent` | int | `0`（グローバルに従う） | ルートレベルの最大並行 NATS 転送リクエスト数；0 はグローバル制限に従う；超過時に 503 |
+| `token_fields` | []string | - | トークン検証応答から抽出し `_token` として BridgeRequest に注入するフィールドリスト。例：`["uuid", "username"]`。`token.path_whitelist` にないルートでのみ有効 |
 
 #### `return_fields` 選択可能な値
 
@@ -839,10 +840,13 @@ bridge:
 | `timeout` | int | `5` | NATS リクエストタイムアウト秒数 |
 | `cache_max_entries` | int | `1000` | キャッシュする検証結果の最大エントリ数、上限到達時にキャッシュクリア |
 | `max_concurrent` | int | `256` | 同時トークン検証 NATS リクエストの最大数、超過時に HTTP 503 を返却 |
+| `paseto_secret_key` | any | - | オプションの PASETO ローカル復号キー（UserValidator と同じ形式をサポート） |
 
 > **注意：** トークン検証は**デフォルトで無効**です。有効にするには、設定ファイルに `token` ブロックを明示的に記述する必要があります。
 >
 > タグは **UUID v4**（例：`550e8400-e29b-41d4-a716-446655440000`）を使用し、16進数文字とハイフンのみで構成されるため、`?` および `!` を含まないことが保証されます。
+>
+> UserValidator の `token_claims_mapping.custom_claims` でトークンに書き込まれたカスタム claims（例：`uuid`）は、レベル 2 検証応答に自動的に含まれ、ルートの `token_fields` で抽出できます。
 
 ### トークンキャッシュ
 

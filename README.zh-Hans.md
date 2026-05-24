@@ -625,6 +625,7 @@ routes:
 | `error_info_show`  | int      | 0               | 微服务错误信息显示模式（覆盖 bridge 级别）；0=不记录、1=记录、2=记录+白名单可见、3=记录+全员可见、4=不记录+白名单可见、5=不记录+全员可见 |
 | `time_format`      | string   | -               | 路由级别日志时间日期显示格式（覆盖 bridge 级别）；语义同 bridge 层的 `time_format` |
 | `max_concurrent` | int | `0`（沿用全局） | 路由级别最大并发 NATS 转发请求数；0 表示沿用全局限制；超限时返回 503 |
+| `token_fields` | []string | - | 从令牌验证回覆中提取并注入 BridgeRequest 的令牌 claims 字段列表。示例：`["uuid", "username"]`。可用字段：所有标准 PASETO claims（`username`、`app`、`sub`、`iss`、`iat`、`nbf`、`exp`、`jti`）及通过 UserValidator `custom_claims` 写入的自定义 claims（如 `uuid`）。仅对不在 `token.path_whitelist` 中的路由生效 |
 
 #### `return_fields` 可选值
 
@@ -638,6 +639,36 @@ routes:
 | `ip`          | 解析后的真实客户端 IP            |
 | `params`      | URL 查询参数和表单参数（键值对） |
 | `body`        | 请求体原始内容                   |
+
+#### `token_fields` — 将令牌 Claims 注入 BridgeRequest
+
+启用令牌验证后，若路由配置了 `token_fields`，验证成功后桥接器会从验证回覆中提取指定字段，并以 `_token` 对象的形式注入到转发给下游微服务的 BridgeRequest 中。
+
+```yaml
+routes:
+  - path: "/api/user"
+    nats_subject: "user.get"
+    return_fields: ["method", "path", "body"]
+    token_fields: ["uuid", "username"]   # 从验证后的令牌中提取这些字段
+```
+
+转发给下游的 BridgeRequest 将包含：
+```json
+{
+  "_token": {"uuid": "550e8400-...", "username": "admin"},
+  "method": "GET",
+  "path": "/api/user",
+  "body": "..."
+}
+```
+
+下游微服务可直接使用 `_token.uuid` 来识别已认证用户，无需自行解密令牌。
+
+`_token` 对象仅在以下条件同时满足时注入：
+- 该路由不在 `token.path_whitelist` 中（令牌实际被验证）
+- 令牌验证成功
+- `token_fields` 至少配置了一个字段名
+- 该字段在验证回覆中存在
 
 #### `schema_body` JSON Schema 校验
 
@@ -825,6 +856,7 @@ bridge:
     timeout: 5                           # 等待 NATS 回复的超时秒数
     cache_max_entries: 1000              # 缓存的验证结果最大条数
     max_concurrent: 256                  # 最大并发验证数
+    # paseto_secret_key: "hex..."        # 可选：PASETO 本地解密密钥
 ```
 
 | 字段 | 类型 | 默认值 | 说明 |
@@ -839,10 +871,13 @@ bridge:
 | `timeout` | int | `5` | NATS 请求超时秒数 |
 | `cache_max_entries` | int | `1000` | 缓存的验证结果最大条数，达上限时清空缓存 |
 | `max_concurrent` | int | `256` | 最大并发令牌验证 NATS 请求数，超限时返回 HTTP 503 |
+| `paseto_secret_key` | any | - | 可选 PASETO 本地解密密钥。支持十六进制字符串或 `{时间戳: 密钥}` 密钥轮替字典（格式与 NyarukoLogin UserValidator 相同）。设置后可未来用于本地解密令牌以提取自定义 claims |
 
 > **注意：** 令牌验证**默认为停用**。若要启用，必须在配置文件中明确加入 `token` 区块。
 >
 > tag 使用 **UUID v4**（如 `550e8400-e29b-41d4-a716-446655440000`），仅包含十六进制字符与连字号，保证不含 `?` 和 `!` 字符。
+>
+> 通过 UserValidator 的 `token_claims_mapping.custom_claims` 写入令牌的自定义 claims（如 `uuid`）会自动包含在层级 2 验证回覆中，可通过路由的 `token_fields` 提取。
 
 ### 令牌缓存
 

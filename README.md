@@ -647,6 +647,7 @@ routes:
 | `error_info_show`  | int      | 0               | Microservice error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all |
 | `time_format`      | string   | -               | Route-level log timestamp format (overrides bridge level); same semantics as bridge-level `time_format` |
 | `max_concurrent` | int | `0` (global) | Route-level max concurrent NATS forwarding; 0 uses global limit; returns 503 when exceeded |
+| `token_fields` | []string | - | Token claim fields to extract from verification reply and inject as `_token` object into the forwarded BridgeRequest. Example: `["uuid", "username"]`. Available fields: all standard PASETO claims (`username`, `app`, `sub`, `iss`, `iat`, `nbf`, `exp`, `jti`) plus custom claims (e.g., `uuid`) written via UserValidator's `custom_claims`. Only effective on routes NOT in `token.path_whitelist` |
 
 #### `return_fields` Options
 
@@ -660,6 +661,36 @@ routes:
 | `ip`          | Resolved real client IP                                    |
 | `params`      | URL query parameters and form parameters (key-value pairs) |
 | `body`        | Raw request body content                                   |
+
+#### `token_fields` — Inject Token Claims into BridgeRequest
+
+When token verification is enabled and a route has `token_fields` configured, after successful verification the bridge extracts the specified fields from the verification reply and injects them as a `_token` object into the BridgeRequest forwarded to downstream microservices.
+
+```yaml
+routes:
+  - path: "/api/user"
+    nats_subject: "user.get"
+    return_fields: ["method", "path", "body"]
+    token_fields: ["uuid", "username"]   # Extract these from verified token
+```
+
+The forwarded BridgeRequest will look like:
+```json
+{
+  "_token": {"uuid": "550e8400-...", "username": "admin"},
+  "method": "GET",
+  "path": "/api/user",
+  "body": "..."
+}
+```
+
+This allows downstream microservices to identify the authenticated user without needing to decode the token themselves.
+
+The `_token` object is only injected when:
+- The route is NOT in `token.path_whitelist` (token is actually verified)
+- Token verification succeeds
+- `token_fields` is configured with at least one field name
+- The field exists in the verification reply
 
 #### `schema_body` JSON Schema Validation
 
@@ -847,6 +878,7 @@ bridge:
     timeout: 5                           # NATS reply timeout in seconds
     cache_max_entries: 1000              # Max cached verification results
     max_concurrent: 256                  # Max concurrent verifications
+    # paseto_secret_key: "hex..."        # Optional: PASETO local decryption key
 ```
 
 | Field | Type | Default | Description |
@@ -861,10 +893,13 @@ bridge:
 | `timeout` | int | `5` | NATS request timeout in seconds |
 | `cache_max_entries` | int | `1000` | Maximum cached token verification results; cache is cleared when full |
 | `max_concurrent` | int | `256` | Maximum concurrent token verification NATS requests; returns HTTP 503 when exceeded |
+| `paseto_secret_key` | any | - | Optional PASETO local symmetric key for decrypting tokens. Supports single hex string or `{timestamp: key}` key rotation dict (same format as NyarukoLogin UserValidator). When set, enables future local token decryption to extract custom claims independently |
 
 > **Note:** Token verification is **disabled by default**. To enable it, the `token` block must be explicitly present in the configuration.
 >
 > The tag is a **UUID v4** (e.g., `550e8400-e29b-41d4-a716-446655440000`), which naturally contains only hexadecimal characters and hyphens — guaranteeing it does not contain `?` or `!`.
+>
+> Custom claims (e.g., `uuid`) written into the token via UserValidator's `token_claims_mapping.custom_claims` are automatically included in the level 2 verification reply and can be extracted via `token_fields` on routes.
 
 ### Token Caching
 

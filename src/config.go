@@ -105,6 +105,22 @@ type TokenConfig struct {
 	// 接近上限（≥90%）時會在日誌中輸出警告。
 	// 設為 0 或負數時使用預設值。
 	MaxConcurrent int `json:"max_concurrent,omitempty" yaml:"max_concurrent,omitempty"`
+
+	// PasetoSecretKey 定義用於本地解密 PASETO 令牌的對稱金鑰（選填）
+	//
+	// 支援兩種格式：
+	//   A. 單一十六進位字串（向後相容）：
+	//        paseto_secret_key: "404142..."
+	//
+	//   B. 金鑰輪替字典（推薦）：
+	//        paseto_secret_key:
+	//          1748736000: "404142..."
+	//          1779840000: "606162..."
+	//
+	// 若未設定，ApiNatsBridge 完全依賴 UserValidator 的驗證回覆來取得令牌 claims。
+	// 若已設定，可用於本地解密令牌以提取自訂 claims（如 uuid），
+	// 減少對 UserValidator 驗證回覆格式的依賴。
+	PasetoSecretKey interface{} `json:"paseto_secret_key,omitempty" yaml:"paseto_secret_key,omitempty"`
 }
 
 // EffectiveNatsSubject 回傳實際使用的 NATS 主題名稱。
@@ -483,6 +499,23 @@ type RouteConfig struct {
 	// 這些標頭會附加到此路由的所有 HTTP 回應中。
 	// 若與 bridge.response_headers 中的同名標頭衝突，路由層級設定優先。
 	ResponseHeaders map[string]string `json:"response_headers,omitempty" yaml:"response_headers,omitempty"`
+
+	// TokenFields 定義要從令牌驗證回覆中提取並轉發給下游微服務的欄位清單。
+	//
+	// 當此路由的請求經過令牌驗證後，ApiNatsBridge 會從 UserValidator
+	// 的驗證回覆中提取指定欄位，並以「_token」物件的形式注入到
+	// 轉發給下游微服務的 BridgeRequest 中。
+	//
+	// 範例：
+	//   token_fields: ["uuid", "username"]
+	//   轉發的 BridgeRequest 將包含：
+	//   { "_token": {"uuid": "xxx-xxx", "username": "admin"}, "method": "...", ... }
+	//
+	// 支援的欄位取決於 UserValidator 的層級 2 回覆內容，
+	// 包含標準 claims（username、app、sub、iss、iat、nbf、exp、jti）
+	// 以及透過 custom_claims 寫入的自訂 claims（如 uuid）。
+	// 留空或未設定則不注入 _token 欄位。
+	TokenFields []string `json:"token_fields,omitempty" yaml:"token_fields,omitempty"`
 }
 
 // TimeoutDuration 回傳此路由等待 NATS 回應的逾時時間。
