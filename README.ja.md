@@ -625,20 +625,54 @@ routes:
 | `error_info_show`  | int      | 0                | マイクロサービスエラー情報表示モード（bridge レベルを上書き）；0=記録しない、1=記録、2=記録+ホワイトリストに表示、3=記録+全員に表示、4=記録しない+ホワイトリストに表示、5=記録しない+全員に表示 |
 | `time_format`      | string   | -               | ルートレベルログタイムスタンプ表示形式（bridge レベルを上書き）；意味は bridge レベルの `time_format` と同じ |
 | `max_concurrent` | int | `0`（グローバルに従う） | ルートレベルの最大並行 NATS 転送リクエスト数；0 はグローバル制限に従う；超過時に 503 |
-| `token_fields` | []string | - | トークン検証応答から抽出し `_token` として BridgeRequest に注入するフィールドリスト。例：`["uuid", "username"]`。`token.path_whitelist` にないルートでのみ有効 |
+| `token_fields` | []string | - | **（後方互換、`return_fields` の使用を推奨）** レガシーのトークン claims 注入設定。リストされたフィールドは検証応答から抽出されトップレベルフィールドとして注入されます。新規デプロイでは `return_fields` にトークン claim 名を直接追加してください |
 
 #### `return_fields` 選択可能な値
 
-| フィールド名  | 説明                                                       |
-| ------------- | ---------------------------------------------------------- |
-| `method`      | HTTP リクエストメソッド                                    |
-| `path`        | リクエストパス                                             |
-| `headers`     | リクエストヘッダー（キーと値のペア）                       |
-| `cookies`     | Cookie（キーと値のペア）                                   |
-| `remote_addr` | 直接 TCP アドレス（ポート含む）                            |
-| `ip`          | 解決後の実際のクライアント IP                              |
-| `params`      | URL クエリパラメータとフォームパラメータ（キーと値のペア） |
-| `body`        | リクエストボディの生内容                                   |
+| フィールド名  | ソース | 説明                                                       |
+| ------------- | ------ | ---------------------------------------------------------- |
+| `method`      | HTTP   | HTTP リクエストメソッド                                    |
+| `path`        | HTTP   | リクエストパス                                             |
+| `headers`     | HTTP   | リクエストヘッダー（キーと値のペア）                       |
+| `cookies`     | HTTP   | Cookie（キーと値のペア）                                   |
+| `remote_addr` | HTTP   | 直接 TCP アドレス（ポート含む）                            |
+| `ip`          | HTTP   | 解決後の実際のクライアント IP                              |
+| `params`      | HTTP   | URL クエリパラメータとフォームパラメータ（キーと値のペア） |
+| `body`        | HTTP   | リクエストボディの生内容                                   |
+| *その他*      | **トークン** | **トークン claim フィールド** — 上記 8 つの既知フィールドに含まれない名前は、トークン検証 claims から解決されトップレベルフィールドとして注入されます。利用可能な claims：`username`、`app`、`sub`、`iss`、`iat`、`nbf`、`exp`、`jti` および UserValidator の `custom_claims` で書き込まれたカスタム claims（例：`uuid`）。`token.path_whitelist` にないルートでのみ有効 |
+
+#### `return_fields` でのトークン Claims
+
+トークン検証が有効な場合、`return_fields` 内で 8 つの既知 BridgeRequest フィールド（`method`、`path`、`headers`、`cookies`、`remote_addr`、`ip`、`params`、`body`）に**含まれない**名前は、トークン検証応答の claims から自動的に解決され、転送データに**トップレベルフィールド**として注入されます。
+
+```yaml
+routes:
+  - path: "/api/user"
+    nats_subject: "user.get"
+    return_fields: ["method", "path", "body", "uuid", "username"]
+    #                                         ^^^^   ^^^^^^^^
+    #                              トークン claims から取得
+```
+
+転送されるデータ：
+```json
+{
+  "method": "GET",
+  "path": "/api/user",
+  "body": "...",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "admin"
+}
+```
+
+これにより、ダウンストリームのマイクロサービスはトークンを自分でデコードすることなく、認証済みユーザーを識別できます。
+
+トークン claim フィールドは以下の条件を満たす場合にのみ注入されます：
+- ルートが `token.path_whitelist` にない（トークンが実際に検証される）
+- トークン検証が成功
+- フィールドが検証応答に存在
+
+> **後方互換性：** レガシーの `token_fields` 設定は引き続きサポートされます。リストされたフィールドはトップレベルフィールドとして注入されます（`_token` オブジェクトにラップされなくなりました）。新規デプロイでは `return_fields` の使用を推奨します。
 
 #### `schema_body` JSON Schema 検証
 
@@ -846,7 +880,7 @@ bridge:
 >
 > タグは **UUID v4**（例：`550e8400-e29b-41d4-a716-446655440000`）を使用し、16進数文字とハイフンのみで構成されるため、`?` および `!` を含まないことが保証されます。
 >
-> UserValidator の `token_claims_mapping.custom_claims` でトークンに書き込まれたカスタム claims（例：`uuid`）は、レベル 2 検証応答に自動的に含まれ、ルートの `token_fields` で抽出できます。
+> UserValidator の `token_claims_mapping.custom_claims` でトークンに書き込まれたカスタム claims（例：`uuid`）は、レベル 2 検証応答に自動的に含まれ、ルートの `return_fields` に対応する名前を追加することで抽出できます（またはレガシーの `token_fields` 設定を使用）。
 
 ### トークンキャッシュ
 

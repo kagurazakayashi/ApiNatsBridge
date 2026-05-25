@@ -395,6 +395,10 @@ routes:
     # response_headers:
     #   Access-Control-Allow-Origin: "https://example.com"
     #   X-Custom-Header: "custom-value"
-    # 此路由的 token_fields：從令牌驗證回覆中提取指定欄位，
-    # 以 "_token" 物件注入 BridgeRequest 轉發給下游微服務
+    # 令牌 claims 注入：在 return_fields 中加入非 BridgeRequest 已知欄位名稱，
+    # 即可從令牌驗證回覆中提取對應 claims 並以頂層欄位注入轉發資料。
+    # 例如：return_fields 中加入 "sub" 和 "username"，下游收到：
+    # {"method":"...","body":"...","sub":"admin","username":"admin"}
+    # 可用欄位：username、app、sub、iss、iat、nbf、exp、jti 及自訂 claims（如 uuid）
+    # 向後相容：token_fields 仍可使用，效果等同（頂層注入）
     # token_fields: ["sub", "username"]

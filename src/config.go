@@ -500,21 +500,24 @@ type RouteConfig struct {
 	// 若與 bridge.response_headers 中的同名標頭衝突，路由層級設定優先。
 	ResponseHeaders map[string]string `json:"response_headers,omitempty" yaml:"response_headers,omitempty"`
 
-	// TokenFields 定義要從令牌驗證回覆中提取並轉發給下游微服務的欄位清單。
+	// TokenFields 定義要從令牌驗證回覆中提取並轉發給下游微服務的欄位清單（向後相容）。
 	//
-	// 當此路由的請求經過令牌驗證後，ApiNatsBridge 會從 UserValidator
-	// 的驗證回覆中提取指定欄位，並以「_token」物件的形式注入到
-	// 轉發給下游微服務的 BridgeRequest 中。
+	// 新版設定建議改用 return_fields 統一管理：
+	// 將令牌欄位名稱直接加入 return_fields 即可，不屬於 BridgeRequest
+	// 已知欄位（method、path、headers、cookies、remote_addr、ip、params、body）
+	// 的名稱會自動從令牌 claims 中解析。
 	//
-	// 範例：
-	//   token_fields: ["uuid", "username"]
-	//   轉發的 BridgeRequest 將包含：
-	//   { "_token": {"uuid": "xxx-xxx", "username": "admin"}, "method": "...", ... }
+	// 若仍使用此欄位，提取後的欄位會以頂層欄位形式注入轉發資料。
+	//
+	// 範例（新版 return_fields 方式）：
+	//   return_fields: ["method", "body", "sub", "username"]
+	//   轉發的資料將包含：
+	//   { "method": "...", "body": "...", "sub": "admin", "username": "admin" }
 	//
 	// 支援的欄位取決於 UserValidator 的層級 2 回覆內容，
 	// 包含標準 claims（username、app、sub、iss、iat、nbf、exp、jti）
 	// 以及透過 custom_claims 寫入的自訂 claims（如 uuid）。
-	// 留空或未設定則不注入 _token 欄位。
+	// 留空或未設定則不注入令牌欄位。
 	TokenFields []string `json:"token_fields,omitempty" yaml:"token_fields,omitempty"`
 }
 

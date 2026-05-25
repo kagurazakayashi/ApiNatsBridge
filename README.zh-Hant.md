@@ -625,48 +625,54 @@ routes:
 | `error_info_show`  | int      | 0               | 微服務錯誤資訊顯示模式（覆蓋 bridge 層級）；0=不記錄、1=記錄、2=記錄+白名單可見、3=記錄+全員可見、4=不記錄+白名單可見、5=不記錄+全員可見 |
 | `time_format`      | string   | -               | 路由層級日誌時間日期顯示格式（覆蓋 bridge 層級）；語義同 bridge 層的 `time_format` |
 | `max_concurrent` | int | `0`（沿用全域） | 路由層級最大並行 NATS 轉發請求數；0 表示沿用全域限制；超限時回傳 503 |
-| `token_fields` | []string | - | 從令牌驗證回覆中提取並注入 BridgeRequest 的欄位清單。範例：`["uuid", "username"]`。可用欄位：所有標準 PASETO claims（`username`、`app`、`sub`、`iss`、`iat`、`nbf`、`exp`、`jti`）及透過 UserValidator `custom_claims` 寫入的自訂 claims（如 `uuid`）。僅對不在 `token.path_whitelist` 中的路由生效 |
+| `token_fields` | []string | - | **（向後相容，推薦改用 `return_fields`）** 舊版令牌 claims 注入設定。列出的欄位從驗證回覆中提取並以頂層欄位注入。新部署應將令牌 claim 名稱直接加入 `return_fields` |
 
 #### `return_fields` 可選值
 
-| 欄位名        | 說明                             |
-| ------------- | -------------------------------- |
-| `method`      | HTTP 請求方法                    |
-| `path`        | 請求路徑                         |
-| `headers`     | 請求標頭（鍵值對）               |
-| `cookies`     | Cookie（鍵值對）                 |
-| `remote_addr` | 直連 TCP 位址（含連接埠）        |
-| `ip`          | 解析後的真實用戶端 IP            |
-| `params`      | URL 查詢參數和表單參數（鍵值對） |
-| `body`        | 請求主體原始內容                 |
+| 欄位名        | 來源   | 說明                             |
+| ------------- | ------ | -------------------------------- |
+| `method`      | HTTP   | HTTP 請求方法                    |
+| `path`        | HTTP   | 請求路徑                         |
+| `headers`     | HTTP   | 請求標頭（鍵值對）               |
+| `cookies`     | HTTP   | Cookie（鍵值對）                 |
+| `remote_addr` | HTTP   | 直連 TCP 位址（含連接埠）        |
+| `ip`          | HTTP   | 解析後的真實用戶端 IP            |
+| `params`      | HTTP   | URL 查詢參數和表單參數（鍵值對） |
+| `body`        | HTTP   | 請求主體原始內容                 |
+| *其他名稱*    | **令牌** | **令牌 claim 欄位** — 不屬於以上 8 個已知欄位的名稱，會從令牌驗證 claims 中解析並以頂層欄位注入。可用 claims：`username`、`app`、`sub`、`iss`、`iat`、`nbf`、`exp`、`jti` 及透過 UserValidator `custom_claims` 寫入的自訂 claims（如 `uuid`）。僅對不在 `token.path_whitelist` 中的路由生效 |
 
-#### `token_fields` — 將令牌 Claims 注入 BridgeRequest
+#### `return_fields` 中的令牌 Claims
 
-啟用令牌驗證後，若路由配置了 `token_fields`，驗證成功後橋接器會從驗證回覆中提取指定欄位，並以 `_token` 物件的形式注入到轉發給下游微服務的 BridgeRequest 中。
+啟用令牌驗證後，`return_fields` 中**不屬於** 8 個已知 BridgeRequest 欄位（`method`、`path`、`headers`、`cookies`、`remote_addr`、`ip`、`params`、`body`）的名稱，會自動從令牌驗證回覆的 claims 中解析並以**頂層欄位**注入轉發資料。
 
 ```yaml
 routes:
   - path: "/api/user"
     nats_subject: "user.get"
-    return_fields: ["method", "path", "body"]
-    token_fields: ["uuid", "username"]   # 從驗證後的令牌中提取這些欄位
+    return_fields: ["method", "path", "body", "uuid", "username"]
+    #                                         ^^^^   ^^^^^^^^
+    #                              這些來自令牌 claims
 ```
 
-轉發給下游的 BridgeRequest 將包含：
+轉發給下游的資料將包含：
 ```json
 {
-  "_token": {"uuid": "550e8400-...", "username": "admin"},
   "method": "GET",
   "path": "/api/user",
-  "body": "..."
+  "body": "...",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "admin"
 }
 ```
 
-`_token` 物件僅在以下條件同時滿足時注入：
+下游微服務可直接使用 `uuid` 來識別已認證使用者，無需自行解密令牌。
+
+令牌 claim 欄位僅在以下條件滿足時注入：
 - 該路由不在 `token.path_whitelist` 中（令牌實際被驗證）
 - 令牌驗證成功
-- `token_fields` 至少配置了一個欄位名
 - 該欄位在驗證回覆中存在
+
+> **向後相容：** 舊版 `token_fields` 設定仍可使用。其中列出的欄位現在以頂層欄位注入（不再包裹在 `_token` 物件中）。新部署建議直接使用 `return_fields`。
 
 #### `schema_body` JSON Schema 驗證
 
@@ -874,7 +880,7 @@ bridge:
 >
 > tag 使用 **UUID v4**（如 `550e8400-e29b-41d4-a716-446655440000`），僅包含十六進位字元與連字號，保證不含 `?` 和 `!` 字元。
 >
-> 透過 UserValidator 的 `token_claims_mapping.custom_claims` 寫入令牌的自訂 claims（如 `uuid`）會自動包含在層級 2 驗證回覆中，可透過路由的 `token_fields` 提取。
+> 透過 UserValidator 的 `token_claims_mapping.custom_claims` 寫入令牌的自訂 claims（如 `uuid`）會自動包含在層級 2 驗證回覆中，可在路由的 `return_fields` 中加入對應名稱來提取（或透過舊版 `token_fields` 設定）。
 
 ### 令牌快取
 

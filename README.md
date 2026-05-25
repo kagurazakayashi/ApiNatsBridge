@@ -647,50 +647,54 @@ routes:
 | `error_info_show`  | int      | 0               | Microservice error info display mode (overrides bridge level); 0=off, 1=log, 2=log+whitelist, 3=log+all, 4=whitelist, 5=all |
 | `time_format`      | string   | -               | Route-level log timestamp format (overrides bridge level); same semantics as bridge-level `time_format` |
 | `max_concurrent` | int | `0` (global) | Route-level max concurrent NATS forwarding; 0 uses global limit; returns 503 when exceeded |
-| `token_fields` | []string | - | Token claim fields to extract from verification reply and inject as `_token` object into the forwarded BridgeRequest. Example: `["uuid", "username"]`. Available fields: all standard PASETO claims (`username`, `app`, `sub`, `iss`, `iat`, `nbf`, `exp`, `jti`) plus custom claims (e.g., `uuid`) written via UserValidator's `custom_claims`. Only effective on routes NOT in `token.path_whitelist` |
+| `token_fields` | []string | - | **(Backward compatible, prefer `return_fields`)** Legacy config for token claim injection. Fields listed here are extracted from the verification reply and injected as top-level fields. New deployments should add token claim names directly to `return_fields` instead |
 
 #### `return_fields` Options
 
-| Field         | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `method`      | HTTP request method                                        |
-| `path`        | Request path                                               |
-| `headers`     | Request headers (key-value pairs)                          |
-| `cookies`     | Cookies (key-value pairs)                                  |
-| `remote_addr` | Direct TCP address (including port)                        |
-| `ip`          | Resolved real client IP                                    |
-| `params`      | URL query parameters and form parameters (key-value pairs) |
-| `body`        | Raw request body content                                   |
+| Field         | Source | Description                                                |
+| ------------- | ------ | ---------------------------------------------------------- |
+| `method`      | HTTP   | HTTP request method                                        |
+| `path`        | HTTP   | Request path                                               |
+| `headers`     | HTTP   | Request headers (key-value pairs)                          |
+| `cookies`     | HTTP   | Cookies (key-value pairs)                                  |
+| `remote_addr` | HTTP   | Direct TCP address (including port)                        |
+| `ip`          | HTTP   | Resolved real client IP                                    |
+| `params`      | HTTP   | URL query parameters and form parameters (key-value pairs) |
+| `body`        | HTTP   | Raw request body content                                   |
+| *any other*   | **Token** | **Token claim field** — Any name not in the above list is resolved from token verification claims and injected as a top-level field. Available claims: `username`, `app`, `sub`, `iss`, `iat`, `nbf`, `exp`, `jti`, plus custom claims (e.g., `uuid`) written via UserValidator's `custom_claims`. Only effective on routes NOT in `token.path_whitelist` |
 
-#### `token_fields` — Inject Token Claims into BridgeRequest
+#### Token Claims in `return_fields`
 
-When token verification is enabled and a route has `token_fields` configured, after successful verification the bridge extracts the specified fields from the verification reply and injects them as a `_token` object into the BridgeRequest forwarded to downstream microservices.
+When token verification is enabled, any field name in `return_fields` that is **not** one of the 8 known BridgeRequest fields (`method`, `path`, `headers`, `cookies`, `remote_addr`, `ip`, `params`, `body`) is automatically resolved from the token verification reply claims and injected as a **top-level field** into the forwarded data.
 
 ```yaml
 routes:
   - path: "/api/user"
     nats_subject: "user.get"
-    return_fields: ["method", "path", "body"]
-    token_fields: ["uuid", "username"]   # Extract these from verified token
+    return_fields: ["method", "path", "body", "uuid", "username"]
+    #                                         ^^^^   ^^^^^^^^
+    #                              these are resolved from token claims
 ```
 
-The forwarded BridgeRequest will look like:
+The forwarded data will look like:
 ```json
 {
-  "_token": {"uuid": "550e8400-...", "username": "admin"},
   "method": "GET",
   "path": "/api/user",
-  "body": "..."
+  "body": "...",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "admin"
 }
 ```
 
 This allows downstream microservices to identify the authenticated user without needing to decode the token themselves.
 
-The `_token` object is only injected when:
+Token claim fields are only injected when:
 - The route is NOT in `token.path_whitelist` (token is actually verified)
 - Token verification succeeds
-- `token_fields` is configured with at least one field name
 - The field exists in the verification reply
+
+> **Backward compatibility:** The legacy `token_fields` config is still supported. Fields listed in `token_fields` are now injected as top-level fields (no longer wrapped in a `_token` object). New deployments should use `return_fields` instead.
 
 #### `schema_body` JSON Schema Validation
 
@@ -899,7 +903,7 @@ bridge:
 >
 > The tag is a **UUID v4** (e.g., `550e8400-e29b-41d4-a716-446655440000`), which naturally contains only hexadecimal characters and hyphens — guaranteeing it does not contain `?` or `!`.
 >
-> Custom claims (e.g., `uuid`) written into the token via UserValidator's `token_claims_mapping.custom_claims` are automatically included in the level 2 verification reply and can be extracted via `token_fields` on routes.
+> Custom claims (e.g., `uuid`) written into the token via UserValidator's `token_claims_mapping.custom_claims` are automatically included in the level 2 verification reply and can be extracted by adding the claim name to `return_fields` on routes (or via the legacy `token_fields` config).
 
 ### Token Caching
 

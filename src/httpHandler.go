@@ -85,6 +85,15 @@ type BridgeResponse struct {
 	Body string `json:"body"`
 }
 
+// bridgeRequestFieldSet 定義 BridgeRequest 結構中已知的 HTTP 請求欄位名稱。
+//
+// 在 return_fields 中，屬於此集合的欄位會從 HTTP 請求中解析；
+// 不屬於此集合的欄位會從令牌驗證 claims 中解析，並以頂層欄位形式注入轉發資料。
+var bridgeRequestFieldSet = map[string]struct{}{
+	"method": {}, "path": {}, "headers": {}, "cookies": {},
+	"remote_addr": {}, "ip": {}, "params": {}, "body": {},
+}
+
 // buildSchemaFromMap 會從 schema_body 對應表中建立可供 jsonschema 編譯的 JSON Schema。
 //
 // 此函式會先複製原始 map，避免直接修改設定來源，並處理以下控制鍵：
@@ -262,10 +271,11 @@ type BridgeHandler struct {
 	// 若未設定或集合為空，表示轉發完整 BridgeRequest。
 	routeReturnFields map[string]map[string]struct{}
 
-	// routeTokenFields 是各路徑要從令牌驗證回覆中提取並注入 BridgeRequest 的欄位清單。
+	// routeTokenFields 是各路徑要從令牌驗證回覆中提取並注入 BridgeRequest 的欄位清單（向後相容）。
 	//
 	// key 為 HTTP 路徑，value 為要提取的欄位名稱清單。
-	// 提取後的欄位會以 "_token" 物件形式注入 BridgeRequest。
+	// 提取後的欄位會以頂層欄位形式注入轉發資料。
+	// 新版設定建議改用 return_fields 統一管理：將令牌欄位名稱直接加入 return_fields 即可。
 	routeTokenFields map[string][]string
 
 	// routeHTTPCodeKeys 是各路徑微服務回傳 JSON 中用來表示 HTTP 狀態碼的鍵名。
@@ -524,7 +534,7 @@ func NewBridgeHandler(natsClient *nyanats.NyaNATS, routes []RouteConfig, cdnHead
 		// 保存此路由的 token_fields：從令牌驗證回覆中提取的欄位清單。
 		if len(r.TokenFields) > 0 {
 			tokenFieldsMap[r.Path] = r.TokenFields
-			LogBridge("路徑 %s: 令牌欄位注入 (_token): %v", r.Path, r.TokenFields)
+			LogBridge("路徑 %s: 令牌欄位注入 (頂層): %v", r.Path, r.TokenFields)
 		}
 
 		// 保存此路由的 HTTP 狀態碼鍵名設定。
@@ -1504,8 +1514,9 @@ func (h *BridgeHandler) validateResponse(resp BridgeResponse, path string, clien
 //
 // 若路由設定了 return_fields，則只會把指定欄位送往微服務；
 // 若未設定或集合為空，則會送出完整 BridgeRequest。
-// 若路由設定了 token_fields 且 tokenClaims 非 nil，則將指定欄位以 "_token" 物件
-// 形式注入 BridgeRequest，讓下游微服務可直接取得令牌中的使用者識別資訊（如 uuid）。
+// return_fields 中不屬於 BridgeRequest 已知欄位的名稱，
+// 會從令牌驗證 claims 中解析並以頂層欄位形式注入轉發資料。
+// 向後相容：若路由仍使用 token_fields 設定，其欄位也會以頂層形式注入。
 // 回應若可解析為 BridgeResponse，會依其內容建立 HTTPResponse；
 // 若無法解析，則會將原始 NATS 回應本文以 200 狀態碼直接返回。
 func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject string, clientIP string, tokenClaims map[string]interface{}) *nyaapiserver.HTTPResponse {
@@ -1544,35 +1555,46 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 	} else if len(fields) == 1 {
 		// 若只指定一個欄位，則直接送出該欄位內容，避免額外包一層 JSON 物件。
 		for name := range fields {
-			switch name {
-			case "body":
-				reqJSON = req.Body
-			case "method":
-				reqJSON = []byte(req.Method)
-			case "path":
-				reqJSON = []byte(req.Path)
-			case "remote_addr":
-				reqJSON = []byte(req.RemoteAddr)
-			case "ip":
-				reqJSON = []byte(clientIP)
-			case "headers":
-				headers := req.Headers
-				if headers == nil {
-					headers = make(map[string]string)
+			if _, isRequestField := bridgeRequestFieldSet[name]; isRequestField {
+				switch name {
+				case "body":
+					reqJSON = req.Body
+				case "method":
+					reqJSON = []byte(req.Method)
+				case "path":
+					reqJSON = []byte(req.Path)
+				case "remote_addr":
+					reqJSON = []byte(req.RemoteAddr)
+				case "ip":
+					reqJSON = []byte(clientIP)
+				case "headers":
+					headers := req.Headers
+					if headers == nil {
+						headers = make(map[string]string)
+					}
+					reqJSON, err = json.Marshal(headers)
+				case "cookies":
+					cookies := req.Cookies
+					if cookies == nil {
+						cookies = make(map[string]string)
+					}
+					reqJSON, err = json.Marshal(cookies)
+				case "params":
+					params := req.Params
+					if params == nil {
+						params = make(map[string]string)
+					}
+					reqJSON, err = json.Marshal(params)
 				}
-				reqJSON, err = json.Marshal(headers)
-			case "cookies":
-				cookies := req.Cookies
-				if cookies == nil {
-					cookies = make(map[string]string)
+			} else if tokenClaims != nil {
+				// 單一令牌 claim 欄位：從 tokenClaims 中解析。
+				if val, ok := tokenClaims[name]; ok {
+					if strVal, isStr := val.(string); isStr {
+						reqJSON = []byte(strVal)
+					} else {
+						reqJSON, err = json.Marshal(val)
+					}
 				}
-				reqJSON, err = json.Marshal(cookies)
-			case "params":
-				params := req.Params
-				if params == nil {
-					params = make(map[string]string)
-				}
-				reqJSON, err = json.Marshal(params)
 			}
 			break
 		}
@@ -1624,34 +1646,57 @@ func (h *BridgeHandler) forwardToNats(req *nyaapiserver.HTTPRequest, natsSubject
 			data["body"] = string(req.Body)
 		}
 
+		// 從令牌 claims 中解析 return_fields 裡的非 BridgeRequest 欄位。
+		if tokenClaims != nil {
+			for name := range fields {
+				if _, isRequestField := bridgeRequestFieldSet[name]; !isRequestField {
+					if val, ok := tokenClaims[name]; ok {
+						data[name] = val
+					}
+				}
+			}
+		}
+
+		// 向後相容：將 token_fields 中指定的欄位注入至頂層（若尚未由 return_fields 覆蓋）。
+		if legacyTokenFields, hasLegacy := h.routeTokenFields[req.Path]; hasLegacy && tokenClaims != nil {
+			for _, field := range legacyTokenFields {
+				if _, alreadyIncluded := data[field]; !alreadyIncluded {
+					if val, ok := tokenClaims[field]; ok {
+						data[field] = val
+					}
+				}
+			}
+		}
+
 		// 將裁剪後的請求資料序列化為 JSON。
 		reqJSON, err = json.Marshal(data)
 	}
 
-	// --- 注入令牌 claims (_token) ---
-	// 若此路由設定了 token_fields 且驗證後有可用的令牌 claims，
-	// 則將指定欄位以 "_token" 物件形式注入 BridgeRequest，
-	// 供下游微服務直接取得令牌中的使用者識別資訊（如 uuid）。
-	tokenFields, hasTokenFields := h.routeTokenFields[req.Path]
-	if hasTokenFields && tokenClaims != nil && len(tokenFields) > 0 {
-		tokenData := make(map[string]interface{})
-		for _, field := range tokenFields {
-			if val, ok := tokenClaims[field]; ok {
-				tokenData[field] = val
+	// --- 向後相容：注入令牌 claims（全量模式與單欄位模式） ---
+	// 當路由透過 token_fields 設定且非多欄位模式時，
+	// 將指定欄位以頂層欄位形式注入轉發資料。
+	if !hasFields || len(fields) == 1 {
+		if legacyTokenFields, hasLegacy := h.routeTokenFields[req.Path]; hasLegacy && tokenClaims != nil && len(legacyTokenFields) > 0 {
+			tokenData := make(map[string]interface{})
+			for _, field := range legacyTokenFields {
+				if val, ok := tokenClaims[field]; ok {
+					tokenData[field] = val
+				}
 			}
-		}
-		if len(tokenData) > 0 {
-			// 嘗試將現有的 reqJSON 反序列化為 map，加入 _token 後重新序列化
-			var data map[string]interface{}
-			if json.Unmarshal(reqJSON, &data) != nil {
-				// 反序列化失敗（如 return_fields 僅指定了單一純量值），
-				// 建立包裝物件，將原始內容置於 _payload 欄位
-				data = map[string]interface{}{"_payload": string(reqJSON)}
-			}
-			data["_token"] = tokenData
-			reqJSON, err = json.Marshal(data)
-			if err != nil {
-				return h.errResp(500, LHTTP.HttpInternalErrorMarshalRequest(), err.Error(), clientIP)
+			if len(tokenData) > 0 {
+				var data map[string]interface{}
+				if json.Unmarshal(reqJSON, &data) != nil {
+					// 反序列化失敗（如 return_fields 僅指定了單一純量值），
+					// 建立包裝物件，將原始內容置於 _payload 欄位。
+					data = map[string]interface{}{"_payload": string(reqJSON)}
+				}
+				for k, v := range tokenData {
+					data[k] = v
+				}
+				reqJSON, err = json.Marshal(data)
+				if err != nil {
+					return h.errResp(500, LHTTP.HttpInternalErrorMarshalRequest(), err.Error(), clientIP)
+				}
 			}
 		}
 	}
